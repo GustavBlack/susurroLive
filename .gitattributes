@@ -1,0 +1,2 @@
+# upstream patches must stay byte-exact (core.autocrlf would rewrite them)
+*.patch -text

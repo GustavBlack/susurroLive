@@ -1,0 +1,40 @@
+diff --git a/src/runtime/ggml/session.cpp b/src/runtime/ggml/session.cpp
+index 1a2d8df..5f85e08 100644
+--- a/src/runtime/ggml/session.cpp
++++ b/src/runtime/ggml/session.cpp
+@@ -6,6 +6,7 @@
+ // Licensed under the MIT License. See THIRD_PARTY_NOTICES.md.
+ #include <algorithm>
+ #include <chrono>
++#include <cstdlib>
+ #include <mutex>
+ #include <unordered_set>
+ 
+@@ -22,6 +23,18 @@ Session::Session(BackendManager& backend_manager, Module* module, GGUFLoader* gg
+     this->gguf_loader = gguf_loader;
+ }
+ 
++// CPU worker threads for graph compute. Upstream uses 4; NEMO_SPEECH_CPU_THREADS overrides it
++// (susurroLive patch: long offline diarization is CPU-bound on machines without a GPU).
++static int
++cpu_compute_threads() {
++    static const int n = [] {
++        const char* env = std::getenv("NEMO_SPEECH_CPU_THREADS");
++        const int v = env ? std::atoi(env) : 0;
++        return v > 0 && v <= 256 ? v : 4;
++    }();
++    return n;
++}
++
+ // Launches without forcing each graph boundary to wait for the device. The
+ // caller synchronizes once after any queued host transfers.
+ static bool
+@@ -908,7 +921,7 @@ Session::run_impl(
+         }
+ 
+         auto _t2 = _clk::now();
+-        if (!ggml_graph_compute_helper_async(sched.get(), cr.gf, 4)) {
++        if (!ggml_graph_compute_helper_async(sched.get(), cr.gf, cpu_compute_threads())) {
+             GGMLF_LOG_ERROR("Failed to compute graph\n");
+             throw std::runtime_error("failed to compute graph");
+         }

@@ -1,0 +1,26 @@
+{
+  "name": "susurro-live",
+  "productName": "susurroLive",
+  "version": "1.4.1",
+  "description": "Live, portable, multi-source transcription studio.",
+  "private": true,
+  "author": "Gustav L.",
+  "license": "UNLICENSED",
+  "main": "src/main/index.js",
+  "scripts": {
+    "dev": "electron .",
+    "smoke": "electron . --smoke",
+    "native:whisper": "powershell -ExecutionPolicy Bypass -File scripts/fetch-whisper-prebuilt.ps1",
+    "native:models": "powershell -ExecutionPolicy Bypass -File scripts/fetch-models.ps1",
+    "native:diarizer": "powershell -ExecutionPolicy Bypass -File scripts/build-diarizer.ps1",
+    "native:verify": "powershell -ExecutionPolicy Bypass -File scripts/verify-gpu.ps1",
+    "dist": "electron-builder --win --config electron-builder.yml && node scripts/check-release.js"
+  },
+  "devDependencies": {
+    "electron": "^44.0.0",
+    "electron-builder": "^26.0.0"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.9"
+  }
+}

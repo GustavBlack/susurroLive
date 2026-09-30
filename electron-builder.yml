@@ -1,0 +1,75 @@
+# susurroLive — electron-builder config
+# Produces an NSIS installer (primary) + a portable exe (secondary). See ADR 0002 + installer plan.
+
+appId: studio.dayfornite.susurrolive
+productName: susurroLive
+copyright: © 2026 Gustav L.
+
+directories:
+  output: build
+  buildResources: assets
+
+# ---- distribute: installer first, portable second ----
+win:
+  target:
+    - target: nsis        # PRIMARY: real Windows installation (assisted, per-user)
+      arch: [x64]
+    - target: portable    # SECONDARY: zero-install option (USB sticks)
+      arch: [x64]
+  icon: assets/icon.ico
+  # Code signing goes here when a cert is available (SmartScreen friendly).
+
+nsis:
+  oneClick: false                       # assisted: dir choice + shortcut checkboxes
+  perMachine: false                     # per-user install, no UAC prompt
+  allowElevation: true                  # per-machine opt-in for shared machines
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: susurroLive
+  artifactName: susurroLive-Setup-${version}.${ext}
+  deleteAppDataOnUninstall: false       # sessions/settings survive uninstall
+  differentialPackage: true             # blockmap -> smaller delta updates
+
+# ---- update feed: public GitHub Releases ----
+# (a read token is only needed when building against a private fork — see docs/installer.md)
+publish:
+  provider: github
+  owner: GustavBlack
+  repo: susurroLive
+
+portable:
+  artifactName: susurroLive-${version}-portable.${ext}
+  # one .exe, runs directly, leaves no permanent install
+
+# ---- native payload lives OUTSIDE the asar ----
+extraResources:
+  - from: native/bin
+    to: bin                      # whisper-cli.exe + DLLs  -> resources/bin/
+    filter: ["**/*"]             # includes bin/diarizer/ (nemo-speech.exe + its OWN ggml DLLs;
+                                 # a subfolder so they never overwrite whisper's same-named DLLs)
+  - from: native/models
+    to: models                   # ggml-*.bin (bundled default)
+    filter:
+      - "ggml-small.en.bin"        # bundled default; all other models download at runtime
+      - "Nemotron-3-Diarization.q8_0.gguf"  # speaker diarization, 102 MiB (scripts/build-diarizer.ps1)
+                                   # NOTE: keep this filter small — the portable target embeds the
+                                   # payload as a .7z that 32-bit makensis must mmap, and NSIS has a
+                                   # hard ~2 GB ceiling. Adding large-v3-turbo (1.62 GB) blows it:
+                                   # "failed creating mmap of ...nsis.7z". Bundle one small model only.
+
+# ---- native .node modules must not be inside the asar ----
+asar: true
+asarUnpack:
+  - "**/*.node"
+
+files:
+  - "src/**"
+  - "package.json"
+  - "!**/*.map"
+  - "!docs/**"
+  - "!tests/**"
+
+# Runtime paths resolve via process.resourcesPath, e.g.:
+#   path.join(process.resourcesPath, "bin", "whisper-cli.exe")
+#   path.join(process.resourcesPath, "models", "ggml-small.en.bin")

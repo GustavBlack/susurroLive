@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; media-src 'self' file: blob:; img-src 'self' data: blob:; connect-src 'self' file: data: blob:;" />
+<title>susurroLive</title>
+<link rel="stylesheet" href="theme/tokens.css" />
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div id="app">
+
+  <!-- ===================================================== header -->
+  <header class="hdr">
+    <div class="brand">
+      <span class="dot"></span>
+      <span class="brand-name">susurro<b>Live</b></span>
+    </div>
+    <input id="sessionName" class="session-name" value="Untitled Session" spellcheck="false" />
+    <div class="hdr-right">
+      <span id="statusPill" class="pill pill-idle" role="status">Idle</span>
+      <button id="btnSessions" class="icon-btn" title="Sessions">▤</button>
+      <button id="btnSettings" class="icon-btn" title="Settings">⚙</button>
+    </div>
+  </header>
+
+  <!-- ===================================================== engine banner -->
+  <div id="banner" class="banner hidden"></div>
+
+  <!-- ===================================================== transport -->
+  <section class="transport">
+    <button id="btnRecord" class="rec" title="Start recording" aria-label="Start recording">
+      <span class="rec-inner" aria-hidden="true"></span>
+    </button>
+    <button id="btnPause" class="btn pause-record" disabled title="Pause recording">Pause</button>
+    <div class="transport-mid">
+      <div id="timer" class="timer">00:00</div>
+      <div id="recSub" class="rec-sub">not recording</div>
+    </div>
+    <div class="transport-right">
+      <label class="field">
+        <span>chunk</span>
+        <select id="chunkSec">
+          <option value="15">15s</option>
+          <option value="30">30s</option>
+          <option value="60" selected>60s</option>
+          <option value="120">120s</option>
+        </select>
+      </label>
+      <button id="btnFolder" class="btn">📁 Session folder…</button>
+      <div id="folderPath" class="folder-path">no folder chosen</div>
+    </div>
+  </section>
+
+  <!-- ===================================================== main grid -->
+  <main class="grid">
+    <div class="col-left">
+      <!-- sources -->
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Sources</h2>
+          <div class="panel-actions">
+            <button id="btnAddMic" class="btn btn-sm">＋ Microphone</button>
+            <button id="btnAddSys" class="btn btn-sm">＋ System Audio</button>
+          </div>
+        </div>
+        <div id="sourceList" class="source-list"></div>
+        <div id="sourceEmpty" class="empty">No sources yet — add a microphone or system audio.</div>
+      </section>
+
+      <!-- transcript -->
+      <section class="panel panel-grow">
+        <div class="panel-head">
+          <h2>Transcript</h2>
+          <div class="panel-actions">
+            <button id="btnDiarize" class="btn btn-sm hidden" title="Identify who spoke when">◐ Identify speakers</button>
+            <button id="btnFollow" class="btn btn-sm hidden">⤓ follow</button>
+            <button id="btnPlay" class="btn btn-sm" disabled>▶ Play</button>
+            <button id="btnStopPlay" class="btn btn-sm" disabled>■</button>
+            <span id="playTime" class="mono muted-sm">00:00.0 / 00:00.0</span>
+          </div>
+        </div>
+        <div id="spkLegend" class="spk-legend hidden" aria-label="Speakers"></div>
+        <div id="transcript" class="transcript">
+          <div class="empty">Transcription appears here as chunks complete.</div>
+        </div>
+        <audio id="player" preload="metadata"></audio>
+      </section>
+    </div>
+
+    <div class="col-right">
+      <div id="vizState" class="viz-head">Ready</div>
+      <canvas id="viz" width="260" height="640" aria-hidden="true"></canvas>
+      <div id="vizLegend" class="viz-legend"></div>
+    </div>
+  </main>
+
+  <!-- ===================================================== pipeline strip -->
+  <section class="pipeline">
+    <div class="pipe-label">CHUNKS</div>
+    <div id="chunkStrip" class="chunk-strip"></div>
+    <div id="pipeStatus" class="pipe-status mono">0 queued</div>
+    <button id="btnRetryAll" class="btn btn-sm hidden">Retry failed</button>
+  </section>
+
+  <!-- ===================================================== export -->
+  <footer class="exportbar">
+    <span class="pipe-label">EXPORT</span>
+    <button class="btn btn-sm" data-export="txt">clean .txt</button>
+    <button class="btn btn-sm" data-export="json">timecoded .json</button>
+    <button class="btn btn-sm" data-export="audio">audio .wav</button>
+    <span id="exportMsg" class="mono muted-sm"></span>
+  </footer>
+
+  <!-- ===================================================== toast -->
+  <div id="toast" class="toast hidden"></div>
+
+  <!-- ===================================================== settings drawer -->
+  <aside id="settingsDrawer" class="drawer hidden">
+    <div class="drawer-head">
+      <h2>Settings</h2>
+      <span id="updatePill" class="pill hidden"></span>
+      <button id="btnCloseSettings" class="icon-btn">✕</button>
+    </div>
+    <div class="drawer-body">
+      <div class="field-block">
+        <div class="field-label">Model</div>
+        <div id="modelList" class="model-list"></div>
+      </div>
+      <label class="field wide">
+        <span>Engine</span>
+        <select id="setEngine">
+          <option value="whisper">whisper.cpp</option>
+          <option value="parakeet">parakeet — fast, 25 languages</option>
+        </select>
+      </label>
+      <label class="field wide">
+        <span>Language</span>
+        <select id="setLang">
+          <option value="en">en — English</option>
+          <option value="auto">auto — detect</option>
+        </select>
+      </label>
+      <label class="field wide">
+        <span>Device</span>
+        <select id="setDevice">
+          <option value="auto">auto</option>
+          <option value="cuda">GPU (CUDA)</option>
+          <option value="cpu">CPU</option>
+        </select>
+      </label>
+      <label class="field wide">
+        <span>Chunk window (s)</span>
+        <select id="setChunk">
+          <option value="15">15</option>
+          <option value="30">30</option>
+          <option value="60">60</option>
+          <option value="120">120</option>
+        </select>
+      </label>
+      <label class="row-check">
+        <input type="checkbox" id="setVad" checked /> <span>VAD — skip silence</span>
+      </label>
+      <label class="row-check">
+        <input type="checkbox" id="setDiarAuto" /> <span>Identify speakers automatically after transcription</span>
+      </label>
+
+      <div class="diag" id="diag"></div>
+    </div>
+  </aside>
+
+  <!-- ===================================================== session browser -->
+  <div id="sessionModal" class="modal hidden">
+    <div class="modal-card">
+      <div class="drawer-head">
+        <h2>Sessions</h2>
+        <button id="btnCloseSessions" class="icon-btn">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-actions">
+          <button id="btnNewSession" class="btn btn-sm">New session…</button>
+          <button id="btnImportMedia" class="btn btn-sm">⤓ Import media…</button>
+          <button id="btnOpenFolder" class="btn btn-sm">Open folder…</button>
+          <button id="btnRefreshList" class="btn btn-sm">Refresh</button>
+        </div>
+        <div id="sessionList" class="session-list"></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+<script src="app.js" type="module"></script>
+</body>
+</html>

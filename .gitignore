@@ -1,0 +1,51 @@
+# deps
+node_modules/
+
+# build output
+build/
+dist/
+out/
+*.tsbuildinfo
+
+# native artifacts (fetched/built by scripts, never committed)
+#   native/bin     whisper-cli.exe + ggml + CUDA/cuDNN runtime DLLs
+#   native/models  ggml model weights
+#   native/src     whisper.cpp checkout + build*/ dirs
+#   native/_*      scratch build logs + smoke screenshots
+native/bin/
+native/models/
+native/src/
+native/_*
+
+# local env / secrets
+.env
+.env.local
+.claude/settings.local.json
+
+# agentic / assistant tooling — local-only, never in the repo
+.claude/
+.hermes/
+.scratch/
+knowledge/
+AGENTS.md
+CLAUDE.md
+.cursorrules
+.cursor/
+.windsurf/
+
+# editor / os
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+
+# local dev launcher (machine-specific paths, local-only convenience)
+run-susurroLive.bat
+
+# logs / scratch
+*.log
+temp/
+
+# updater-test stub marker
+tools/app-update.yml

@@ -1,0 +1,83 @@
+/* susurroLive — Warm Ink tokens
+ * Derived from Warm-Ink-Style-Bible.html + Warm-Ink-Atari-Edition.html
+ * See docs/warm-ink-tokens.md for roles and usage rules.
+ */
+
+:root {
+  /* ---- ink (backgrounds, dark -> light) ---- */
+  --ink-000: #121212;
+  --ink-050: #131514;
+  --ink-100: #181a19;
+  --ink-150: #1f201f;
+  --ink-200: #232523;
+  --ink-250: #2a2c2a;
+  --ink-300: #2e2e2b;
+  --ink-line: #454442;
+
+  /* ---- paper (foreground, dim -> bright) ---- */
+  --muted: #726b68;
+  --muted-2: #a99e98;
+  --paper: #d8d0cb;
+  --paper-hi: #ede8e5;
+  --paper-2: #f5f1ee;
+
+  /* ---- accents ---- */
+  --accent: #c99a6b;
+  --amber: #b07a52;
+  --ochre: #a8914a;
+  --rust: #9e5a52;
+  --sage: #8a8e76;
+  --moss: #9caf9c;
+  --sage-2: #c2d1b8;
+
+  /* ---- semantic aliases ---- */
+  --bg: var(--ink-050);
+  --surface: var(--ink-150);
+  --surface-hi: var(--ink-250);
+  --border: var(--ink-line);
+  --text: var(--paper);
+  --text-dim: var(--muted-2);
+  --live: var(--amber);
+  --done: var(--moss);
+  --queued: var(--sage);
+  --error: var(--rust);
+  --selection-bg: hsla(30, 47%, 60%, 0.2);
+
+  /* ---- speakers (diarization) — arrival order; all >= 4.7:1 on --ink-100 ----
+     Most distinct hues first (most sessions have 2-4 voices). --rust itself is
+     avoided: it means error, and fails contrast as text; clay is its lifted tint. */
+  --spk-1: var(--accent);   /* #c99a6b tan */
+  --spk-2: var(--sage-2);   /* #c2d1b8 pale green */
+  --spk-3: #c98a80;         /* clay */
+  --spk-4: var(--ochre);    /* #a8914a olive gold */
+  --spk-5: var(--moss);     /* #9caf9c */
+  --spk-6: var(--muted-2);  /* #a99e98 */
+  --spk-7: var(--amber);    /* #b07a52 */
+  --spk-8: var(--sage);     /* #8a8e76 */
+
+  /* ---- type ---- */
+  --font-ui: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+
+  /* ---- shape ---- */
+  --r-card: 8px;
+  --r-ctrl: 6px;
+  --r-pill: 999px;
+
+  /* ---- motion ---- */
+  --ease-out: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --t-fast: 180ms;
+  --t-med: 300ms;
+}
+
+::selection {
+  background: var(--selection-bg);
+  color: var(--paper-hi);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --t-fast: 0ms;
+    --t-med: 0ms;
+  }
+}
