@@ -143,4 +143,7 @@ See [`docs/DEV.md`](docs/DEV.md) for the manual test checklist and known limitat
 
 ## License
 
-TBD (internal / personal project).
+Released under the [BSD 3-Clause License](LICENSE). Third-party components keep their own
+licenses — see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and the [`licenses/`](licenses/)
+folder for the full texts (whisper.cpp MIT, sherpa-onnx / NeMo-Speech.cpp Apache-2.0,
+Parakeet CC-BY-4.0 © NVIDIA, Nemotron-3-Diarization OpenMDW-1.1, FFmpeg LGPL-3.0).
