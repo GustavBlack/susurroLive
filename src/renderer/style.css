@@ -52,7 +52,7 @@ body::before {
 .dot {
   width: 9px; height: 9px; border-radius: 50%;
   background: var(--amber);
-  box-shadow: 0 0 0 3px hsla(28, 41%, 51%, .18);
+  box-shadow: 0 0 0 3px var(--tint-accent-20);
 }
 .brand-name { font-weight: 500; letter-spacing: -.01em; color: var(--paper-hi); }
 .brand-name b { color: var(--accent); font-weight: 600; }
@@ -108,8 +108,8 @@ body::before {
   border: 1px solid var(--border);
   background: var(--surface);
 }
-.banner.warn { border-color: var(--ochre); color: var(--paper-hi); background: hsla(44, 36%, 47%, .12); }
-.banner.ok   { border-color: var(--moss); color: var(--sage-2); background: hsla(98, 12%, 65%, .08); }
+.banner.warn { border-color: var(--ochre); color: var(--paper-hi); background: var(--tint-warn); }
+.banner.ok   { border-color: var(--moss); color: var(--sage-2); background: var(--tint-ok); }
 /* DEMO mode must be unmistakable at a glance — slow caution stripes (v1.2 §D). */
 .banner.demo { position: relative; overflow: hidden; }
 .banner.demo::before {
@@ -117,7 +117,7 @@ body::before {
   position: absolute;
   inset: 0;
   opacity: 0.5;
-  background: repeating-linear-gradient(-45deg, transparent 0 10px, hsla(44, 36%, 47%, .1) 10px 20px);
+  background: repeating-linear-gradient(-45deg, transparent 0 10px, var(--tint-warn) 10px 20px);
   animation: demoSlide 3s linear infinite;
 }
 @keyframes demoSlide { to { background-position: 28.28px 0; } }
@@ -327,7 +327,7 @@ select:focus { border-color: var(--accent); }
   padding: 0 1px;
   cursor: pointer;
 }
-.transcript .w.active { background: hsla(30, 47%, 60%, .26); color: var(--paper-2); }
+.transcript .w.active { background: var(--tint-accent-26); color: var(--paper-2); }
 .transcript .w.past { color: var(--paper-hi); }
 .transcript .pending { color: var(--muted); font-style: italic; margin-top: 12px; }
 
@@ -415,7 +415,7 @@ select:focus { border-color: var(--accent); }
   border-color: var(--ochre);
   /* v1.2 §D: compositor-friendly background-position shimmer (Afif pattern formula)
      replaces the harsh opacity blink. Symmetric gradient → seamless loop. */
-  background: linear-gradient(90deg, var(--ochre) 0%, #d9b58c 50%, var(--ochre) 100%);
+  background: linear-gradient(90deg, var(--ochre) 0%, var(--accent-strong) 50%, var(--ochre) 100%);
   background-size: 200% 100%;
   animation: chipShimmer 1.6s linear infinite;
 }
@@ -499,7 +499,7 @@ select:focus { border-color: var(--accent); }
   border-radius: var(--r-ctrl);
 }
 .model-row.installed { border-color: var(--ink-line); }
-.model-row.active-model { border-color: var(--accent); background: hsla(30, 47%, 60%, .09); }
+.model-row.active-model { border-color: var(--accent); background: var(--tint-accent-09); }
 .model-main { min-width: 0; }
 .model-name {
   display: flex; align-items: center; gap: 5px; flex-wrap: wrap;
@@ -530,7 +530,7 @@ select:focus { border-color: var(--accent); }
   background: var(--ink-100);
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--line);
+  background: var(--ink-line);
   border-radius: var(--r-pill);
   border: 3px solid var(--ink-100);   /* insets the thumb into a slim pill */
 }
@@ -548,4 +548,68 @@ select:focus { border-color: var(--accent); }
   display: none;
   width: 0;
   height: 0;
+}
+
+/* ---------------------------------------------------------------- theme picker (v1.5) */
+/* Swatch = bg + accent + text strip of each theme's CURRENT mode, painted inline by JS. */
+.theme-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+}
+.theme-opt {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-ctrl);
+  background: var(--ink-250);
+  cursor: pointer;
+  font-size: 11px; color: var(--muted-2); text-align: left;
+  transition: border-color var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out),
+              background var(--t-fast) var(--ease-out);
+}
+.theme-opt:hover { border-color: var(--accent); color: var(--paper-hi); }
+.theme-opt.on { border-color: var(--accent); color: var(--paper-hi); background: var(--tint-accent-09); }
+.theme-opt .sw {
+  display: flex; flex: none; width: 22px; height: 15px;
+  border-radius: 3px; overflow: hidden;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .35);
+}
+.theme-opt .sw i { flex: 1; }
+.theme-opt .meta { min-width: 0; }
+.theme-opt .nm { display: block; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: inherit; }
+.theme-opt .vb { display: block; font-size: 9px; color: var(--muted); font-family: var(--font-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.theme-opt .vb::before { content: ''; }
+.seg { display: flex; gap: 4px; }
+.seg .btn.on { border-color: var(--accent); color: var(--paper-hi); background: var(--tint-accent-09); }
+
+/* ---------------------------------------------------------------- theme swap (v1.5)
+   667 ms cross-fade with a 111 ms stagger: the window "portions" (chrome surfaces)
+   lead at 0 ms; every other element follows and lands 778 ms in. `html.theme-anim`
+   is applied by app.js ONLY for the duration of the swap, so hover/feed transitions
+   elsewhere keep their own fast timings. Reduced-motion zeroes the durations via
+   --t-theme / --t-theme-delay (tokens.css). */
+html.theme-anim,
+html.theme-anim body,
+html.theme-anim .hdr,
+html.theme-anim .transport,
+html.theme-anim .pipeline,
+html.theme-anim .exportbar,
+html.theme-anim .panel,
+html.theme-anim .col-right,
+html.theme-anim .drawer,
+html.theme-anim .modal-card {
+  transition:
+    background-color var(--t-theme) var(--ease-out),
+    border-color var(--t-theme) var(--ease-out),
+    color var(--t-theme) var(--ease-out),
+    box-shadow var(--t-theme) var(--ease-out);
+}
+html.theme-anim * {
+  transition:
+    background-color var(--t-theme) var(--ease-out) var(--t-theme-delay),
+    border-color var(--t-theme) var(--ease-out) var(--t-theme-delay),
+    color var(--t-theme) var(--ease-out) var(--t-theme-delay),
+    fill var(--t-theme) var(--ease-out) var(--t-theme-delay),
+    stroke var(--t-theme) var(--ease-out) var(--t-theme-delay);
 }

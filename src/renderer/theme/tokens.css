@@ -4,31 +4,43 @@
  */
 
 :root {
-  /* ---- ink (backgrounds, dark -> light) ---- */
-  --ink-000: #121212;
-  --ink-050: #131514;
-  --ink-100: #181a19;
-  --ink-150: #1f201f;
-  --ink-200: #232523;
-  --ink-250: #2a2c2a;
-  --ink-300: #2e2e2b;
-  --ink-line: #454442;
+  /* ---- ink (backgrounds, dark -> light) — default theme (Susurro Warm, dark) ---- */
+  --ink-000: #0c0c0e;
+  --ink-050: #18181b;
+  --ink-100: #202023;
+  --ink-150: #27272a;
+  --ink-200: #2d2d30;
+  --ink-250: #323236;
+  --ink-300: #39393e;
+  --ink-line: #3f3f46;
 
   /* ---- paper (foreground, dim -> bright) ---- */
-  --muted: #726b68;
-  --muted-2: #a99e98;
-  --paper: #d8d0cb;
-  --paper-hi: #ede8e5;
-  --paper-2: #f5f1ee;
+  --muted: #71717a;
+  --muted-2: #9f9fa9;
+  --paper: #e8e6e1;
+  --paper-hi: #ecebe6;
+  --paper-2: #efeeea;
 
   /* ---- accents ---- */
-  --accent: #c99a6b;
-  --amber: #b07a52;
-  --ochre: #a8914a;
-  --rust: #9e5a52;
-  --sage: #8a8e76;
-  --moss: #9caf9c;
-  --sage-2: #c2d1b8;
+  --accent: #d2a679;
+  --accent-strong: #e8b88a;
+  --accent-muted: #4a3728;
+  --record: #c26b6b;
+  --success: #a3c49a;
+  --amber: #ca8972;
+  --ochre: #6b5f4d;
+  --rust: #c26b6b;
+  --sage: #a1b5a0;
+  --moss: #a3c49a;
+  --sage-2: #c6d5be;
+
+  /* ---- translucent tints (theme-driven; see themes.css) ---- */
+  --tint-accent-09: rgba(210, 166, 121, 0.09);
+  --tint-accent-20: rgba(210, 166, 121, 0.2);
+  --tint-accent-26: rgba(210, 166, 121, 0.26);
+  --tint-warn: rgba(107, 95, 77, 0.14);
+  --tint-ok: rgba(163, 196, 154, 0.1);
+  --selection-bg: var(--tint-accent-20);
 
   /* ---- semantic aliases ---- */
   --bg: var(--ink-050);
@@ -41,19 +53,17 @@
   --done: var(--moss);
   --queued: var(--sage);
   --error: var(--rust);
-  --selection-bg: hsla(30, 47%, 60%, 0.2);
 
-  /* ---- speakers (diarization) — arrival order; all >= 4.7:1 on --ink-100 ----
-     Most distinct hues first (most sessions have 2-4 voices). --rust itself is
-     avoided: it means error, and fails contrast as text; clay is its lifted tint. */
-  --spk-1: var(--accent);   /* #c99a6b tan */
-  --spk-2: var(--sage-2);   /* #c2d1b8 pale green */
-  --spk-3: #c98a80;         /* clay */
-  --spk-4: var(--ochre);    /* #a8914a olive gold */
-  --spk-5: var(--moss);     /* #9caf9c */
-  --spk-6: var(--muted-2);  /* #a99e98 */
-  --spk-7: var(--amber);    /* #b07a52 */
-  --spk-8: var(--sage);     /* #8a8e76 */
+  /* ---- speakers (diarization) — arrival order, from themes.js speakerColors().
+     themes.css overrides these per theme; these defaults are the default theme. */
+  --spk-1: #d2a679;
+  --spk-2: #a3c49a;
+  --spk-3: #c87d7d;
+  --spk-4: #bbb58a;
+  --spk-5: #9f9fa9;
+  --spk-6: #cb8b73;
+  --spk-7: #c3d9bd;
+  --spk-8: #98867a;
 
   /* ---- type ---- */
   --font-ui: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -68,6 +78,10 @@
   --ease-out: cubic-bezier(0.2, 0.7, 0.2, 1);
   --t-fast: 180ms;
   --t-med: 300ms;
+  /* v1.5 theme swap: chrome surfaces lead at 0 ms over --t-theme; content
+     follows --t-theme-delay later, finishing at 778 ms total. */
+  --t-theme: 667ms;
+  --t-theme-delay: 111ms;
 }
 
 ::selection {
@@ -79,5 +93,7 @@
   :root {
     --t-fast: 0ms;
     --t-med: 0ms;
+    --t-theme: 0ms;
+    --t-theme-delay: 0ms;
   }
 }

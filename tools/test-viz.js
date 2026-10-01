@@ -23,7 +23,12 @@ app.whenReady().then(async () => {
       section { padding:12px; background:#1f201f; border:1px solid #454442; border-radius:8px }
       p { margin:0 0 14px } canvas { display:block; width:208px; height:600px }
       </style></head><body>${labels.map((label) => `<section><p>${label}</p><canvas width="208" height="600"></canvas></section>`).join('')}</body></html>`));
-    const moduleUrl = 'data:text/javascript;base64,' + fs.readFileSync(path.join(__dirname, '../src/renderer/viz.js')).toString('base64');
+    // v1.5: viz.js imports './theme/themes.js', unresolvable from a data:-URL module.
+    // Bundle the pair for the harness (themes.js itself imports nothing).
+    const themesSrc = fs.readFileSync(path.join(__dirname, '../src/renderer/theme/themes.js'), 'utf8');
+    const vizSrc = fs.readFileSync(path.join(__dirname, '../src/renderer/viz.js'), 'utf8')
+      .replace(/import\s*\{[^}]*\}\s*from\s*'\.\/theme\/themes\.js';/, '');
+    const moduleUrl = 'data:text/javascript;base64,' + Buffer.from(themesSrc + '\n' + vizSrc, 'utf8').toString('base64');
     const results = await win.webContents.executeJavaScript(`(async () => {
       const { Visualizer } = await import(${JSON.stringify(moduleUrl)});
       // Hidden test windows report document.hidden. Override only the harness.

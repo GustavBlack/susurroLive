@@ -1,24 +1,43 @@
-// A lattice of softly illuminated tiles, in the studio's warm-ink palette.
+// A lattice of softly illuminated tiles, tinted by the active theme (v1.5).
 // Idle: eight slow light fields on a per-field schedule. Import: progress-aware
 // rising currents. Audio: source/frequency levels. Reading current: scroll energy.
 // All movement uses elapsed seconds; no random flashes or frame-count particles.
 
-const ACCENT = '#c99a6b';
-const AMBER = '#b07a52';
-const SAGE = '#8a8e76';
-const MOSS = '#9caf9c';
-const MUTED_RGB = [114, 107, 104];
+import { getTheme, DEFAULT_THEME, hexRgb, mixHex, speakerColors } from './theme/themes.js';
+
 const COLS = 12;
 const clamp = (n, min = 0, max = 1) => Math.max(min, Math.min(max, n));
 const smooth = (t) => { t = clamp(t); return t * t * (3 - 2 * t); };
 const gauss = (d, width) => Math.exp(-0.5 * (d / width) ** 2);
-const hexRgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
-const INK = hexRgb('#242624');
-const PALE = hexRgb('#e9d3ae');
-const RAMP = [INK, hexRgb(AMBER), hexRgb(ACCENT), PALE];
-const SAGE_RGB = hexRgb(SAGE);
-const MOSS_RGB = hexRgb(MOSS);
-const RUST_RGB = hexRgb('#9e5a52');
+
+// Canvas palette, derived from the active theme. Mutable module state: the
+// Visualizer.applyThemePalette() method re-derives these on a theme swap. The
+// field functions below close over the module bindings, so reassignment
+// propagates to every consumer on the next frame.
+function buildPalette(p, mode) {
+  const pole = mode === 'light' ? '#000000' : '#FFFFFF';
+  const ink = hexRgb(p.surface2);
+  return {
+    ink,
+    // energy ramp: ink -> dim accent -> accent -> pale highlight
+    ramp: [ink, hexRgb(mixHex(p.accent, p.surface2, 0.45)), hexRgb(p.accent), hexRgb(mixHex(p.accentStrong, p.text, 0.4))],
+    sage: hexRgb(mixHex(p.success, p.textSec, 0.4)),
+    moss: hexRgb(p.success),
+    rust: hexRgb(p.record),
+    mutedRgb: hexRgb(p.textMut),
+    spk: speakerColors(p, mode),
+    lip: mixHex(p.accentStrong, p.text, 0.5),     // per-tile specular lip
+    foot: mixHex(p.bg, '#000000', 0.35),          // per-tile shadow foot
+  };
+}
+const _seed = getTheme(DEFAULT_THEME).dark;
+let PAL = buildPalette(_seed, 'dark');
+let RAMP = PAL.ramp;
+let INK = PAL.ink;
+let SAGE_RGB = PAL.sage;
+let MOSS_RGB = PAL.moss;
+let RUST_RGB = PAL.rust;
+let MUTED_RGB = PAL.mutedRgb;
 
 // v1.2 choreography (docs/v1.2-animations.md §A): per-field dwell on a fixed order,
 // so the dissolve still joins exactly — including the last-to-first wrap. Calm
@@ -132,7 +151,7 @@ export class Visualizer {
     this.tracks = [];
     this.analyser = null;
     this.spectrum = null;
-    this.colors = [ACCENT, AMBER, MOSS, SAGE, '#a8914a', '#9e5a52', '#c2d1b8', '#d8d0cb'];
+    this.colors = PAL.spk;
     this.levels = new Float32Array(COLS);
     this.clock = 0;
     this.modeStarted = 0;
@@ -169,6 +188,25 @@ export class Visualizer {
     this.mode = mode;
     this.modeStarted = this.clock;
     this.levels.fill(0);
+    this.dirty = true;
+  }
+
+  /** v1.5: re-derive the canvas palette for a theme swap (called from app.js). */
+  applyThemePalette(theme, mode) {
+    PAL = buildPalette(theme[mode === 'light' ? 'light' : 'dark'], mode === 'light' ? 'light' : 'dark');
+    RAMP = PAL.ramp;
+    INK = PAL.ink;
+    SAGE_RGB = PAL.sage;
+    MOSS_RGB = PAL.moss;
+    RUST_RGB = PAL.rust;
+    MUTED_RGB = PAL.mutedRgb;
+    this.colors = PAL.spk;
+    // live tracks cache their legend color — remap so meters follow the theme
+    for (let i = 0; i < this.tracks.length; i++) {
+      const c = PAL.spk[i % PAL.spk.length];
+      this.tracks[i].color = c;
+      this.tracks[i].rgb = hexRgb(c);
+    }
     this.dirty = true;
   }
 
@@ -443,10 +481,10 @@ export class Visualizer {
     ctx.roundRect(x, y, size, size, Math.min(2.2, size * 0.13));
     ctx.fill();
     // A tiny lit lip and dark foot give each tile depth without plastic gloss.
-    ctx.fillStyle = '#f5e3c6';
+    ctx.fillStyle = PAL.lip;
     ctx.globalAlpha = (0.02 + b * b * 0.22) * grain;
     ctx.fillRect(x + 2, y + 1, Math.max(0, size - 4), 0.7);
-    ctx.fillStyle = '#121412';
+    ctx.fillStyle = PAL.foot;
     ctx.globalAlpha = 0.15;
     ctx.fillRect(x + 2, y + size - 1, Math.max(0, size - 4), 0.7);
   }

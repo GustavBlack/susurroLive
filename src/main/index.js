@@ -198,14 +198,23 @@ function activateSession(folder) {
   return { ok: true, session: publicSession() };
 }
 
-// --------------------------------------------------------------------------- window
+// ---------------------------------------------------------------- window
+/** Pre-paint flash color: the persisted theme's background (generated data mirror). */
+function themeBackgroundColor() {
+  try {
+    const themes = require('./renderer/theme/themes.json');
+    const t = themes.find((x) => x.id === settings?.get('theme')) || themes[0];
+    return (settings?.get('themeMode') === 'light' ? t.light : t.dark).bg;
+  } catch { return '#18181b'; }
+}
+
 function createWindow() {
   win = new BrowserWindow({
     width: 820,
     height: 1040,
     minWidth: 680,
     minHeight: 880,
-    backgroundColor: '#131514',
+    backgroundColor: themeBackgroundColor(),
     title: 'susurroLive',
     show: !SMOKE,
     autoHideMenuBar: true,
@@ -656,6 +665,50 @@ async function runSmoke() {
     img = await win.webContents.capturePage();
     const out2 = smokePath('_smoke_settings.png');
     fs.writeFileSync(out2, img.toPNG());
+
+    // 2.5) v1.5 theme swap: pick Tokyo Night, verify staged animation + persistence.
+    const themeCheck = await win.webContents.executeJavaScript(`(async () => {
+      let opt = null;
+      for (let i = 0; i < 50 && !opt; i++) {   // wire() may still be awaiting boot
+        opt = document.querySelector('.theme-opt[data-id="tokyo"]');
+        if (!opt) await new Promise((r) => setTimeout(r, 100));
+      }
+      if (!opt) return JSON.stringify({ fail: 'no tokyo option rendered' });
+      opt.click();
+      await new Promise((r) => setTimeout(r, 120));   // inside the 780 ms anim window
+      const html = document.documentElement;
+      const midAnim = html.classList.contains('theme-anim');
+      const accent = getComputedStyle(html).getPropertyValue('--accent').trim();
+      await new Promise((r) => setTimeout(r, 900));   // past the 780 ms cleanup
+      return JSON.stringify({
+        theme: html.dataset.theme,
+        mode: html.dataset.themeMode,
+        midAnim,
+        animCleared: !html.classList.contains('theme-anim'),
+        accent,
+      });
+    })()`);
+    console.log('[smoke] theme swap   :', themeCheck);
+    try {
+      const tc = JSON.parse(themeCheck);
+      if (tc.fail || tc.theme !== 'tokyo' || tc.mode !== 'dark' || !tc.midAnim || !tc.animCleared || !/^#7aa2f7$/i.test(tc.accent)) {
+        console.error(`[smoke] FAILED: theme swap state wrong: ${themeCheck}`);
+        process.exitCode = 1;
+      }
+    } catch { /* non-fatal */ }
+    const themePersisted = (() => { try { return JSON.parse(fs.readFileSync(settings.file, 'utf8')).theme; } catch { return null; } })();
+    console.log('[smoke] theme persisted:', themePersisted);
+    if (themePersisted !== 'tokyo') {
+      console.error('[smoke] FAILED: theme choice not persisted to settings.json');
+      process.exitCode = 1;
+    }
+    img = await win.webContents.capturePage();
+    fs.writeFileSync(smokePath('_smoke_theme.png'), img.toPNG());
+    // restore the default theme so the remaining artifact shots stay canonical
+    await win.webContents.executeJavaScript(`(async () => {
+      const opt = document.querySelector('.theme-opt[data-id="default"]');
+      if (opt) { opt.click(); await new Promise((r) => setTimeout(r, 900)); }
+    })()`);
 
     // 3) back to the main view, then shrink the window so the transcript definitely
     //    overflows - otherwise there is no scrollbar on screen to inspect.

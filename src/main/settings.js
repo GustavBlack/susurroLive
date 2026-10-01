@@ -14,6 +14,8 @@ const DEFAULTS = {
   lastSources: [],           // [{kind, deviceId, label, gain, muted}]
   showGpuBanner: true,
   diarizeAutoOnStop: false,  // identify speakers once a stopped/imported session is transcribed
+  theme: 'default',          // v1.5 theme id — see src/renderer/theme/themes.js
+  themeMode: 'dark',         // dark | light
 };
 
 function createSettings(userDataDir) {

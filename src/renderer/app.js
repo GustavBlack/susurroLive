@@ -1,6 +1,7 @@
 // app.js - susurroLive renderer (state + UI). Main owns truth; this is a projection.
 import { CaptureEngine, listMicrophones } from './audio.js';
 import { Visualizer } from './viz.js';
+import { initTheme, applyTheme, renderThemePicker } from './theme.js';
 
 const api = window.susurro;
 
@@ -708,6 +709,24 @@ async function importMedia() {
 }
 
 // ---------------------------------------------------------------- settings
+/** v1.5 theme picker: re-renders after each pick so the `on` state follows. */
+function renderTheme() {
+  renderThemePicker($('themeList'), {
+    theme: S.settings.theme || 'default',
+    themeMode: S.settings.themeMode || 'dark',
+    onPick: async (id) => {
+      S.settings = await api.settings.set({ theme: id });
+      applyTheme(S.settings.theme, S.settings.themeMode, viz);
+      renderTheme();
+    },
+    onMode: async (m) => {
+      S.settings = await api.settings.set({ themeMode: m });
+      applyTheme(S.settings.theme, S.settings.themeMode, viz);
+      renderTheme();
+    },
+  });
+}
+
 function openSettings() {
   $('settingsDrawer').classList.remove('hidden');
   renderDiag();
@@ -971,6 +990,7 @@ function wire() {
 
   $('btnSettings').onclick = openSettings;
   $('btnCloseSettings').onclick = () => $('settingsDrawer').classList.add('hidden');
+  renderTheme();
   $('btnSessions').onclick = openSessions;
   $('btnCloseSessions').onclick = () => $('sessionModal').classList.add('hidden');
   $('btnNewSession').onclick = newSession;
@@ -1218,6 +1238,8 @@ async function boot() {
   }
   $('setVad').checked = S.settings.vad !== false;
   $('setDiarAuto').checked = !!S.settings.diarizeAutoOnStop;
+  // v1.5: apply the persisted theme BEFORE first paint of dependent UI, no animation.
+  initTheme(S.settings.theme, S.settings.themeMode, viz);
   try { S.diar = await api.diarize.status(); } catch { S.diar = null; }
   await renderModels();
   if (S.settings.lastSessionParent) {
