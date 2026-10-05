@@ -5,7 +5,7 @@
  * Owns: window, settings, GPU probe, transcription engine, pipeline, recorder, sessions, exports.
  * The renderer is a pure projection that talks through the preload bridge.
  */
-const { app, BrowserWindow, ipcMain, desktopCapturer, dialog, shell, clipboard } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, desktopCapturer, dialog, shell, clipboard } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { pathToFileURL } = require('url');
@@ -226,6 +226,15 @@ function createWindow() {
     },
   });
   win.loadFile(RENDERER_HTML);
+  // Right-click anywhere: the one folder the user owns is the sessions root (v1.5.1).
+  win.webContents.on('context-menu', () => {
+    const dir = settings.get('lastSessionParent');
+    Menu.buildFromTemplate([{
+      label: 'Open Sessions Folder',
+      enabled: !!dir,
+      click: () => { if (dir) void shell.openPath(dir); },
+    }]).popup({ window: win });
+  });
   win.on('closed', () => { win = null; });
   return win;
 }
@@ -576,6 +585,18 @@ function registerIpc() {
       });
       persist();
       return { ok: true, path: res.path, bytes: res.bytes };
+    } catch (err) {
+      return { ok: false, error: String(err.message || err) };
+    }
+  });
+
+  ipcMain.handle('export:reveal', () => {
+    if (!active) return { ok: false, error: 'no session' };
+    try {
+      const dir = path.join(active.folder, 'exports');
+      fs.mkdirSync(dir, { recursive: true }); // reveal works before the first export
+      void shell.openPath(dir);
+      return { ok: true, path: dir };
     } catch (err) {
       return { ok: false, error: String(err.message || err) };
     }

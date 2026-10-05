@@ -173,9 +173,27 @@ async function addSystem() {
 }
 
 // ---------------------------------------------------------------- recording
-async function toggleRecord() {
-  return recordAction(() => S.recording ? stopRecording() : startRecording());
+const onRecordButton = () => recordAction(() =>
+  !S.recording ? startRecording() : S.paused ? resumeRecording() : pauseRecording());
+
+// END SESSION confirm — only reachable while paused; hidden on any state change.
+let endConfirmOpen = false;
+function setEndConfirm(open) {
+  endConfirmOpen = open;
+  $('endConfirm').classList.toggle('hidden', !open);
+  if (open) $('btnConfirmEnd').focus();
+  else if ($('endConfirm').contains(document.activeElement)) $('btnRecord').focus();
 }
+function requestEndSession() {
+  if (!S.recording || !S.paused || S.recordBusy) return;
+  setEndConfirm(true);
+}
+function confirmEndSession() {
+  if (!endConfirmOpen) return;
+  setEndConfirm(false);
+  return recordAction(stopRecording);
+}
+function cancelEndSession() { setEndConfirm(false); }
 
 async function recordAction(action) {
   if (S.recordBusy) return;
@@ -189,15 +207,16 @@ async function recordAction(action) {
 function renderRecordControls() {
   const record = $('btnRecord');
   record.disabled = S.recordBusy;
-  record.classList.toggle('recording', S.recording);
+  record.classList.toggle('recording', S.recording && !S.paused);
   record.classList.toggle('paused', S.paused);
-  record.title = S.recording ? 'Stop recording and finish session' : 'Start recording';
+  record.title = !S.recording ? 'Start recording' : S.paused ? 'Resume recording' : 'Pause recording';
   record.setAttribute('aria-label', record.title);
-  const pause = $('btnPause');
-  pause.disabled = !S.recording || S.recordBusy;
-  pause.textContent = S.paused ? 'Resume' : 'Pause';
-  pause.title = S.paused ? 'Resume recording in this session' : 'Pause recording';
-  pause.classList.toggle('resuming', S.paused);
+  record.querySelector('.rec-label').textContent = S.paused ? 'Resume' : 'Pause';
+  const end = $('btnEndSession');
+  const pausedSession = S.recording && S.paused;
+  end.classList.toggle('hidden', !pausedSession);
+  end.disabled = S.recordBusy;
+  if (endConfirmOpen && !pausedSession) setEndConfirm(false);
   $('btnAddMic').disabled = S.recording || S.recordBusy;
   $('btnAddSys').disabled = S.recording || S.recordBusy;
   $('btnSessions').disabled = S.recording || S.recordBusy;
@@ -207,31 +226,28 @@ function renderRecordControls() {
   }
 }
 
-async function togglePause() {
-  return recordAction(async () => {
-    if (!S.recording) return;
-    if (S.paused) {
-      const res = await api.record.resume();
-      if (!res.ok) { showToast(`resume failed: ${res.error}`); return; }
-      S.paused = false;
-      engine.resume();
-      viz.setCapture(engine.tracks);
-      showToast('recording resumed');
-    } else {
-      engine.pause(); // Cut capture immediately, then finalize the queued PCM in main.
-      const res = await api.record.pause().catch((err) => ({ ok: false, error: String(err) }));
-      if (!res.ok) { engine.resume(); showToast(`pause failed: ${res.error}`); return; }
-      S.paused = true;
-      S.recordedSeconds = res.durationSec;
-      viz.setPaused();
-      showToast('paused · resume whenever you’re ready');
-    }
-  });
+async function resumeRecording() {
+  const res = await api.record.resume();
+  if (!res.ok) { showToast(`resume failed: ${res.error}`); return; }
+  S.paused = false;
+  engine.resume();
+  viz.setCapture(engine.tracks);
+  showToast('recording resumed');
+}
+
+async function pauseRecording() {
+  engine.pause(); // Cut capture immediately, then finalize the queued PCM in main.
+  const res = await api.record.pause().catch((err) => ({ ok: false, error: String(err) }));
+  if (!res.ok) { engine.resume(); showToast(`pause failed: ${res.error}`); return; }
+  S.paused = true;
+  S.recordedSeconds = res.durationSec;
+  viz.setPaused();
+  showToast('paused · resume whenever you’re ready');
 }
 
 async function startRecording() {
-  if (!S.session) { showToast('create or open a session first'); openSessions(); return; }
-  if (S.session.chunks?.length) { showToast('create a new session to record another take'); openSessions(); return; }
+  if (!S.session) { showToast('create or open a session first'); openSessions({ highlight: true }); return; }
+  if (S.session.chunks?.length) { showToast('create a new session to record another take'); openSessions({ highlight: true }); return; }
   if (S.sources.length === 0) { showToast('add at least one source'); return; }
 
   // Fresh capture each take (browser keeps device handles tight).
@@ -254,7 +270,6 @@ async function startRecording() {
   S.chunks = [];
   resetTranscript();
   setFollow(true);
-  $('btnRecord').classList.add('recording');
   $('recSub').textContent = `recording · ${engine.sampleRate} Hz · ${S.sources.length} src`;
   setStatus('Recording', 'recording');
   viz.setCapture(engine.tracks);
@@ -278,7 +293,6 @@ async function stopRecording() {
   S.paused = false;
   S.recordedSeconds = res.durationSec;
   $('timer').textContent = fmtClock(res.durationSec);
-  $('btnRecord').classList.remove('recording');
   $('recSub').textContent = 'not recording';
   renderSources();
   const pipe = await api.pipeline.status();
@@ -622,7 +636,13 @@ async function refreshSession() {
   await refreshDiarStatus();
 }
 
-async function openSessions() {
+function closeSessions() {
+  $('sessionModal').classList.add('hidden');
+  $('btnNewSession').classList.remove('cta');
+}
+
+async function openSessions(opts = {}) {
+  if (opts.highlight) $('btnNewSession').classList.add('cta');
   $('sessionModal').classList.remove('hidden');
   await refreshSessionList();
 }
@@ -641,7 +661,7 @@ async function refreshSessionList() {
     item.onclick = async () => {
       const res = await api.session.open(s.folder);
       if (!res.ok) { showToast(`open failed: ${res.error}`); return; }
-      $('sessionModal').classList.add('hidden');
+      closeSessions();
       await refreshSession();
       S.activeWord = -1;
       showToast(`opened ${res.session.name}`);
@@ -651,6 +671,7 @@ async function refreshSessionList() {
 }
 
 async function newSession() {
+  $('btnNewSession').classList.remove('cta');
   let parent = S.settings?.lastSessionParent;
   if (!parent) {
     parent = await api.session.pickFolder();
@@ -660,7 +681,7 @@ async function newSession() {
   const name = $('sessionName').value.trim() || 'Session';
   const res = await api.session.create({ parentDir: parent, name });
   if (!res.ok) { showToast(`create failed: ${res.error}`); return; }
-  $('sessionModal').classList.add('hidden');
+  closeSessions();
   await refreshSession();
   showToast(`session created in ${parent}`);
 }
@@ -684,7 +705,7 @@ async function importMedia() {
   importing = true;
   viz.setImport();
   setStatus('Importing', 'processing');
-  $('sessionModal').classList.add('hidden');
+  closeSessions();
   const base = mediaPath.split(/[\\/]/).pop().replace(/\.[^.]+$/, '');
   $('sessionName').value = base;
   showToast(`importing ${base}…`);
@@ -974,8 +995,11 @@ function loop() {
 
 // ---------------------------------------------------------------- wiring
 function wire() {
-  $('btnRecord').onclick = toggleRecord;
-  $('btnPause').onclick = togglePause;
+  $('btnRecord').onclick = onRecordButton;
+  $('btnEndSession').onclick = requestEndSession;
+  $('btnConfirmEnd').onclick = confirmEndSession;
+  $('btnCancelEnd').onclick = cancelEndSession;
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') cancelEndSession(); });
   $('btnAddMic').onclick = addMic;
   $('btnAddSys').onclick = addSystem;
 
@@ -992,13 +1016,13 @@ function wire() {
   $('btnCloseSettings').onclick = () => $('settingsDrawer').classList.add('hidden');
   renderTheme();
   $('btnSessions').onclick = openSessions;
-  $('btnCloseSessions').onclick = () => $('sessionModal').classList.add('hidden');
+  $('btnCloseSessions').onclick = closeSessions;
   $('btnNewSession').onclick = newSession;
   $('btnImportMedia').onclick = importMedia;
   $('btnOpenFolder').onclick = async () => {
     const res = await api.session.openDialog();
     if (!res.ok) { if (res.error !== 'cancelled') showToast(`open failed: ${res.error}`); return; }
-    $('sessionModal').classList.add('hidden');
+    closeSessions();
     await refreshSession();
     showToast(`opened ${res.session.name}`);
   };
@@ -1091,6 +1115,11 @@ function wire() {
       refreshSession();
     };
   }
+
+  $('btnExportFolder').onclick = async () => {
+    const res = await api.exportReveal();
+    if (!res.ok) showToast(`open failed: ${res.error}`);
+  };
 
   // settings controls
   $('setLang').onchange = async () => { S.settings = await api.settings.set({ language: $('setLang').value }); };

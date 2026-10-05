@@ -107,6 +107,7 @@ contextBridge.exposeInMainWorld('susurro', {
 
   // ---- export / shell ----
   exportRun: (kind) => ipcRenderer.invoke('export:run', kind),
+  exportReveal: () => ipcRenderer.invoke('export:reveal'),
   reveal: (p) => ipcRenderer.invoke('shell:reveal', p),
   copyText: (t) => ipcRenderer.invoke('shell:copy', t),
 

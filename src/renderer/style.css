@@ -141,19 +141,40 @@ body::before {
   cursor: pointer;
   display: grid; place-items: center;
   position: relative;
-  transition: border-color var(--t-fast) var(--ease-out);
+  /* v1.5.1: circle -> labelled rounded-square morph sells the in-progress state. */
+  transition:
+    width 320ms var(--ease-out),
+    border-radius 320ms var(--ease-out),
+    background-color 320ms var(--ease-out),
+    border-color var(--t-fast) var(--ease-out);
 }
 .rec:hover { border-color: var(--rust); }
+.rec-inner,
+.rec-label { grid-area: 1 / 1; }
 .rec-inner {
   width: 22px; height: 22px; border-radius: 50%;
   background: var(--rust);
   transition: all var(--t-fast) var(--ease-out);
 }
-.rec.recording .rec-inner { border-radius: 4px; background: var(--amber); }
+.rec-label {
+  font-size: 11px; font-weight: 600; letter-spacing: .08em;
+  color: var(--ink-000);
+  opacity: 0; transform: scale(.8);
+  transition: opacity var(--t-fast) var(--ease-out), transform var(--t-fast) var(--ease-out);
+  pointer-events: none;
+}
+.rec.recording {
+  width: 88px;
+  border-radius: 14px;
+  background: var(--amber);
+  border-color: var(--amber);
+}
+.rec.recording .rec-inner { opacity: 0; transform: scale(.4); }
+.rec.recording .rec-label { opacity: 1; transform: none; transition-delay: 100ms; }
 .rec.recording::after {
   content: "";
   position: absolute; inset: -4px;
-  border-radius: 50%;
+  border-radius: 14px;
   border: 2px solid var(--amber);
   animation: pulse 1.6s var(--ease-out) infinite;
 }
@@ -161,13 +182,20 @@ body::before {
   0%   { transform: scale(1);    opacity: .65; }
   100% { transform: scale(1.18); opacity: 0; }
 }
-.rec.paused::after { animation: none; opacity: .35; border-color: var(--sage); }
-.rec.paused .rec-inner { background: var(--sage); }
+.rec.paused {
+  width: 88px;
+  border-radius: 14px;
+  background: var(--sage);
+  border-color: var(--sage);
+}
+.rec.paused .rec-inner { opacity: 0; transform: scale(.4); }
+.rec.paused .rec-label { opacity: 1; transform: none; transition-delay: 100ms; }
 .rec:disabled { cursor: default; opacity: .55; }
-.pause-record { min-width: 72px; min-height: 36px; flex: none; }
-.pause-record.resuming { color: var(--sage-2); border-color: var(--sage); }
 :where(button, select, input):focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
-@media (prefers-reduced-motion: reduce) { .rec.recording::after { animation: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .rec, .rec-inner, .rec-label { transition: none; }
+  .rec.recording::after { animation: none; }
+}
 
 .transport-mid { min-width: 110px; }
 .timer { font-family: var(--font-mono); font-size: 26px; color: var(--paper-hi); letter-spacing: .02em; }
@@ -211,6 +239,18 @@ select:focus { border-color: var(--accent); }
 .btn:hover:not(:disabled) { border-color: var(--accent); color: var(--paper-hi); }
 .btn:disabled { opacity: .4; cursor: default; }
 .btn-sm { padding: 5px 9px; font-size: 11px; }
+.btn-end {
+  background: var(--record);
+  border-color: var(--record);
+  color: var(--ink-000);
+  font-weight: 600;
+  letter-spacing: .06em;
+}
+.btn-end:hover:not(:disabled) {
+  border-color: var(--record);
+  color: var(--ink-000);
+  filter: brightness(1.08);
+}
 
 /* ---------------------------------------------------------------- grid */
 .grid { display: grid; grid-template-columns: minmax(0, 1fr) 268px; gap: 10px; flex: 1; min-height: 0; }
@@ -439,7 +479,8 @@ select:focus { border-color: var(--accent); }
 
 /* ---------------------------------------------------------------- toast */
 .toast {
-  position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+  /* v1.5.1: top-center — the export row owns the bottom edge now. */
+  position: fixed; top: 64px; left: 50%; transform: translateX(-50%);
   background: var(--ink-300); border: 1px solid var(--accent);
   color: var(--paper-hi); padding: 9px 16px; border-radius: var(--r-pill);
   font-size: 12px; z-index: 50; max-width: 70vw;
@@ -475,6 +516,31 @@ select:focus { border-color: var(--accent); }
 }
 .modal-body { padding: 12px 14px; overflow-y: auto; }
 .modal-actions { display: flex; gap: 8px; margin-bottom: 12px; }
+.modal-card.confirm { width: 400px; }
+.confirm-copy { margin: 2px 0 16px; font-size: 13px; line-height: 1.55; color: var(--paper); }
+.confirm-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+/* v1.5.1: guided new-session — one gentle shake, then the accent breathes. */
+.btn.cta {
+  border-color: var(--accent);
+  color: var(--paper-hi);
+  background: var(--tint-accent-09);
+  animation:
+    cta-nudge 600ms var(--ease-out) 1,
+    cta-glow 1.8s var(--ease-out) 900ms infinite;
+}
+@keyframes cta-nudge {
+  0%, 100% { transform: none; }
+  20% { transform: translateX(-3px); }
+  40% { transform: translateX(3px); }
+  60% { transform: translateX(-2px); }
+  80% { transform: translateX(2px); }
+}
+@keyframes cta-glow {
+  0%, 100% { box-shadow: 0 0 0 0 transparent; }
+  50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 35%, transparent); }
+}
+@media (prefers-reduced-motion: reduce) { .btn.cta { animation: none; } }
 .session-list { display: flex; flex-direction: column; gap: 6px; }
 .sess-item {
   padding: 9px 11px; background: var(--ink-250); border: 1px solid var(--border);

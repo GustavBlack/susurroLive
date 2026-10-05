@@ -33,8 +33,9 @@
   <section class="transport">
     <button id="btnRecord" class="rec" title="Start recording" aria-label="Start recording">
       <span class="rec-inner" aria-hidden="true"></span>
+      <span class="rec-label" aria-hidden="true">Pause</span>
     </button>
-    <button id="btnPause" class="btn pause-record" disabled title="Pause recording">Pause</button>
+    <button id="btnEndSession" class="btn btn-end hidden" title="End session and finalize transcription">END SESSION</button>
     <div class="transport-mid">
       <div id="timer" class="timer">00:00</div>
       <div id="recSub" class="rec-sub">not recording</div>
@@ -112,6 +113,7 @@
     <button class="btn btn-sm" data-export="json">timecoded .json</button>
     <button class="btn btn-sm" data-export="audio">audio .wav</button>
     <span id="exportMsg" class="mono muted-sm"></span>
+    <button id="btnExportFolder" class="btn btn-sm" title="Open this session's exports folder">open folder</button>
   </footer>
 
   <!-- ===================================================== toast -->
@@ -190,6 +192,22 @@
           <button id="btnRefreshList" class="btn btn-sm">Refresh</button>
         </div>
         <div id="sessionList" class="session-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================================================== end-session confirm -->
+  <div id="endConfirm" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="endConfirmTitle">
+    <div class="modal-card confirm">
+      <div class="drawer-head">
+        <h2 id="endConfirmTitle">End session</h2>
+      </div>
+      <div class="modal-body">
+        <p class="confirm-copy">Ending the session cannot be resumed, do you wish to end the session?</p>
+        <div class="confirm-actions">
+          <button id="btnCancelEnd" class="btn">Cancel</button>
+          <button id="btnConfirmEnd" class="btn btn-end">End session</button>
+        </div>
       </div>
     </div>
   </div>
