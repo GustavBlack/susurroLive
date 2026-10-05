@@ -14,7 +14,7 @@
     "native:models": "powershell -ExecutionPolicy Bypass -File scripts/fetch-models.ps1",
     "native:diarizer": "powershell -ExecutionPolicy Bypass -File scripts/build-diarizer.ps1",
     "native:verify": "powershell -ExecutionPolicy Bypass -File scripts/verify-gpu.ps1",
-    "dist": "electron-builder --win --config electron-builder.yml && node scripts/check-release.js"
+    "dist": "electron-builder --win --config electron-builder.yml --publish never && node scripts/check-release.js"
   },
   "devDependencies": {
     "electron": "^44.0.0",
