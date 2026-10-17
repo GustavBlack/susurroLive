@@ -5,7 +5,7 @@
 
 import { getTheme, DEFAULT_THEME, hexRgb, mixHex, speakerColors } from './theme/themes.js';
 
-const COLS = 12;
+const COLS = 24;
 const clamp = (n, min = 0, max = 1) => Math.max(min, Math.min(max, n));
 const smooth = (t) => { t = clamp(t); return t * t * (3 - 2 * t); };
 const gauss = (d, width) => Math.exp(-0.5 * (d / width) ** 2);
@@ -19,8 +19,15 @@ function buildPalette(p, mode) {
   const ink = hexRgb(p.surface2);
   return {
     ink,
-    // energy ramp: ink -> dim accent -> accent -> pale highlight
-    ramp: [ink, hexRgb(mixHex(p.accent, p.surface2, 0.45)), hexRgb(p.accent), hexRgb(mixHex(p.accentStrong, p.text, 0.4))],
+    // energy ramp: 6 stops, finer in the low end so soft blooms fade to near-ink at the edges
+    ramp: [
+      ink,
+      hexRgb(mixHex(p.accent, p.surface2, 0.66)),
+      hexRgb(mixHex(p.accent, p.surface2, 0.45)),
+      hexRgb(mixHex(p.accent, p.surface2, 0.2)),
+      hexRgb(p.accent),
+      hexRgb(mixHex(p.accentStrong, p.text, 0.4)),
+    ],
     sage: hexRgb(mixHex(p.success, p.textSec, 0.4)),
     moss: hexRgb(p.success),
     rust: hexRgb(p.record),
@@ -45,10 +52,14 @@ let MUTED_RGB = PAL.mutedRgb;
 const IDLE_FADE = 4;
 const IDLE_SCHEDULE = [
   { field: 0, dwell: 18 }, // woven folds
+  { field: 8, dwell: 20 }, // ember heart
   { field: 4, dwell: 22 }, // ink in water
+  { field: 9, dwell: 14 }, // radial pulse
   { field: 2, dwell: 14 }, // diagonal weave
+  { field: 10, dwell: 22 }, // falling motes
   { field: 5, dwell: 20 }, // aurora curtain
   { field: 1, dwell: 16 }, // ripples
+  { field: 11, dwell: 24 }, // fbm bloom
   { field: 3, dwell: 22 }, // wandering ring
   { field: 6, dwell: 16 }, // ember drift
   { field: 7, dwell: 22 }, // tide
@@ -141,6 +152,50 @@ const IDLE_FIELDS = [
     const foam = gauss(y - line, 0.05) * (0.75 + noise(x * 7 + t * 0.03, y * 26) * 0.5);
     return foam * 0.55 + smooth((line - y) / 0.3) * 0.085;
   },
+  (x, y, t) => {
+    // ember heart: a soft breathing core at the center with slow-orbiting embers;
+    // broad falloff so the lattice reads brightest mid-frame, near-ink at the edges.
+    const cx = 0.5 + Math.sin(t * 0.13) * 0.06;
+    const cy = 0.46 + Math.cos(t * 0.11) * 0.06;
+    const core = gauss(Math.hypot(x - cx, y - cy), 0.2) * (0.5 + 0.5 * Math.sin(t * 0.21));
+    let e = core * 0.5;
+    for (let i = 0; i < 3; i++) {
+      const a = t * (0.1 + hash2(i, 9) * 0.05) + i * 2.1 + hash2(i, 17) * 6.283;
+      const px = 0.5 + Math.cos(a) * (0.2 + hash2(i, 23) * 0.12);
+      const py = 0.5 + Math.sin(a) * (0.2 + hash2(i, 29) * 0.12);
+      const life = 0.5 + 0.5 * Math.sin(t * 0.17 + i * 2.3);
+      e += gauss(Math.hypot(x - px, y - py), 0.06 + life * 0.04) * life * life * 0.28;
+    }
+    return e;
+  },
+  (x, y, t) => {
+    // radial pulse: slow concentric rings expanding from center, brighter toward the middle.
+    const d = Math.hypot(x - 0.5, (y - 0.48) * 0.9);
+    const ring = 0.5 + 0.5 * Math.sin(d * 16 - t * 0.5);
+    const bias = 0.4 + 0.6 * (1 - Math.min(1, d));
+    return ring ** 6 * bias * 0.4 * gauss(d, 0.7);
+  },
+  (x, y, t) => {
+    // falling motes: hash-seeded dust drifting through a soft top-biased light shaft.
+    let e = 0;
+    for (let i = 0; i < 5; i++) {
+      const px = 0.2 + hash2(i, 47) * 0.6 + Math.sin(t * (0.08 + hash2(i, 53) * 0.04) + i) * 0.08;
+      const py = 0.1 + hash2(i, 43) * 0.8 + Math.sin(t * (0.09 + hash2(i, 59) * 0.05) + i * 1.3) * 0.15;
+      const life = 0.5 + 0.5 * Math.sin(t * 0.11 + i * 1.7);
+      e += gauss(Math.hypot((x - px) * 0.9, y - py), 0.05 + life * 0.03) * life * 0.3;
+    }
+    const shaft = gauss(x - 0.5, 0.28) * (0.5 + 0.5 * y) * 0.12;
+    return e + shaft;
+  },
+  (x, y, t) => {
+    // fbm bloom: domain-warped value-noise pools with a center bias; the calmest field.
+    const n = (noise(x * 1.6 + t * 0.03, y * 1.6 - t * 0.024)
+      + 0.5 * noise(x * 3.2 - t * 0.02, y * 3.2 + t * 0.02)) / 1.5;
+    const pools = smooth((n - 0.35) * 2.2);
+    const d = Math.hypot(x - 0.5, (y - 0.48) * 0.95);
+    const bias = 0.35 + 0.65 * (1 - Math.min(1, d * 1.3));
+    return pools * bias * 0.5;
+  },
 ];
 
 export class Visualizer {
@@ -158,6 +213,10 @@ export class Visualizer {
     this.lastFrame = null;
     this.lastPaint = null;
     this.dirty = true;
+    // v1.5.2: random per-instance idle offset so no two opens start on the same
+    // field. The field functions stay pure (x,y,t); only the scheduler is offset,
+    // so the last-to-first dissolve wrap still joins cleanly.
+    this.idleOffset = Math.random() * IDLE_TOTAL;
     // v1.2: reading current, import wavefront, transient overlays
     this.scrollVel = 0;        // signed px/s from the transcript scroll listener
     this.scrollEnergy = 0;     // 0..1 envelope driving the streak overlay
@@ -411,7 +470,7 @@ export class Visualizer {
   }
 
   _idleField(x, y, t) {
-    const tt = t % IDLE_TOTAL;
+    const tt = (t + this.idleOffset) % IDLE_TOTAL;
     let slot = 0;
     while (tt >= IDLE_STARTS[slot] + IDLE_SCHEDULE[slot].dwell) slot++;
     const local = tt - IDLE_STARTS[slot];
@@ -467,28 +526,39 @@ export class Visualizer {
     pixels[offset + 3] += (energy - pixels[offset + 3]) * blend;
     const b = clamp(pixels[offset + 3]);
     const rgb = `${Math.round(pixels[offset])},${Math.round(pixels[offset + 1])},${Math.round(pixels[offset + 2])}`;
-    // Two restrained halos soften the seams; no per-tile filters/shadow blurs.
+    // Halos soften the seams into a soft bloom; the wider one only on bright tiles,
+    // since the dim periphery's bloom is already near-invisible. No per-tile blurs.
     if (b > 0.25) {
       ctx.fillStyle = `rgb(${rgb})`;
       ctx.globalAlpha = (b - 0.25) * 0.075;
       ctx.fillRect(x - 2, y - 2, size + 4, size + 4);
-      ctx.globalAlpha *= 0.45;
-      ctx.fillRect(x - 4, y - 4, size + 8, size + 8);
+      if (b > 0.5) {
+        ctx.globalAlpha *= 0.45;
+        ctx.fillRect(x - 4, y - 4, size + 8, size + 8);
+      }
     }
     ctx.globalAlpha = 0.56 + b * 0.44;
     ctx.fillStyle = `rgb(${rgb})`;
     ctx.beginPath();
     ctx.roundRect(x, y, size, size, Math.min(2.2, size * 0.13));
     ctx.fill();
-    // A tiny lit lip and dark foot give each tile depth without plastic gloss.
-    ctx.fillStyle = PAL.lip;
-    ctx.globalAlpha = (0.02 + b * b * 0.22) * grain;
-    ctx.fillRect(x + 2, y + 1, Math.max(0, size - 4), 0.7);
-    ctx.fillStyle = PAL.foot;
-    ctx.globalAlpha = 0.15;
-    ctx.fillRect(x + 2, y + size - 1, Math.max(0, size - 4), 0.7);
+    // A tiny lit lip and dark foot give each lit tile depth; skipped on dim tiles
+    // where they read as nothing, to keep the dense lattice within the frame budget.
+    if (b > 0.2) {
+      ctx.fillStyle = PAL.lip;
+      ctx.globalAlpha = (0.02 + b * b * 0.22) * grain;
+      ctx.fillRect(x + 2, y + 1, Math.max(0, size - 4), 0.7);
+      ctx.fillStyle = PAL.foot;
+      ctx.globalAlpha = 0.15;
+      ctx.fillRect(x + 2, y + size - 1, Math.max(0, size - 4), 0.7);
+    }
   }
 }
 
 // Exposed for the test harness (tools/test-viz.js).
 Visualizer.IDLE_SCHEDULE = IDLE_SCHEDULE;
+Visualizer.IDLE_FIELDS = IDLE_FIELDS;
+Visualizer.IDLE_TOTAL = IDLE_TOTAL;
+// RAMP is a live module binding (re-derived on every theme swap), so expose it via a
+// static getter that always reflects the active theme's ramp.
+Object.defineProperty(Visualizer, 'RAMP', { get: () => RAMP });

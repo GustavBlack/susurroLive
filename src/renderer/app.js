@@ -937,7 +937,38 @@ function renderUpdatePill(u) {
   pill.className = 'pill hidden';
 }
 
+/** Settings → About: manual update check with inline feedback. */
+function initAboutBlock() {
+  const btn = $('btnCheckUpdate');
+  const res = $('updateResult');
+  if (!btn || !res) return;
+  if (S.appVersion) $('aboutVersion').textContent = `susurroLive v${S.appVersion}`;
+  let busy = false;
+  btn.addEventListener('click', async () => {
+    if (busy) return;
+    busy = true;
+    btn.disabled = true;
+    btn.textContent = 'Checking…';
+    const show = (text, cls = '') => { res.className = `about-result ${cls}`; res.textContent = text; };
+    const st = S.update || {};
+    if (!st.feedConfigured) {
+      show('No update feed in this build (dev run or portable exe) — grab the latest release from GitHub.', 'err');
+    } else {
+      show('Checking for updates…');
+      const r = await api.update.check().catch((e) => ({ ok: false, error: e.message }));
+      const u = await api.update.status().catch(() => S.update || {});
+      if (!r.ok) show(`Couldn't check: ${r.error || 'unknown error'}`, 'err');
+      else if (u.available) show(`Update ${u.info?.version || ''} available — use the header pill to download.`, 'ok');
+      else show(`You're up to date (v${S.appVersion}).`, 'ok');
+    }
+    btn.disabled = false;
+    btn.textContent = 'Check for updates';
+    busy = false;
+  });
+}
+
 function watchUpdates() {
+  initAboutBlock();
   api.on('updateStatus', (u) => {
     S.update = u;
     renderUpdatePill(u);

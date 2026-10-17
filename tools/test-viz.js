@@ -1,5 +1,9 @@
 'use strict';
 // Real Chromium checks for the visualizer's timing, accessibility, and modes.
+// 1.5.2 contract: 24-column lattice, ~12 idle fields, randomized idle start
+// phase per launch, finer (>= 6-stop) energy ramp. viz.js must expose
+// IDLE_FIELDS and RAMP for this harness (like IDLE_SCHEDULE) and carry a
+// per-instance idleOffset; the test reads COLS from instance state (levels).
 // Run: node tools/test-viz.js [optional screenshot.png]
 const fs = require('fs');
 const path = require('path');
@@ -38,6 +42,7 @@ app.whenReady().then(async () => {
       const canvases = [...document.querySelectorAll('canvas')];
       const visuals = canvases.map((c) => new Visualizer(c));
       const [idle, ripple, importer, paused, capture] = visuals;
+      const COLS = idle.levels.length; // 1.5.2: the lattice is 24 columns
       await new Promise(requestAnimationFrame);
       importer.setImport();
       paused.setPaused();
@@ -45,7 +50,7 @@ app.whenReady().then(async () => {
       capture.setCapture(sources);
       for (let frame = 0; frame <= 240; frame++) visuals.forEach((v) => v.draw(frame * 1000 / 60));
       check('each mode renders finite, nonempty pixels', visuals.every((v) => [...v.pixels].every(Number.isFinite) && v.pixels.some((n, i) => i % 4 === 3 && n > 0.1)));
-      check('independent sources have different levels', capture.levels[0] > capture.levels[11] + 0.15);
+      check('independent sources have different levels', capture.levels[0] > capture.levels[COLS - 1] + 0.15);
       const saved = paused.canvas.toDataURL();
       for (let frame = 241; frame < 280; frame++) paused.draw(frame * 1000 / 60);
       check('paused state settles to a still frame', paused.canvas.toDataURL() === saved);
@@ -90,7 +95,7 @@ app.whenReady().then(async () => {
       check('paused never polls audio analyser', analyserReads === 2);
       a.destroy(); b.destroy();
 
-      // Capture a second idle motif without waiting for its full 18-second turn.
+      // Jump 24 s into the cycle to land on a later idle slot before the perf pass.
       ripple.clock = 24; ripple.lastFrame = null; ripple.dirty = true;
       for (let frame = 0; frame <= 60; frame++) ripple.draw(5000 + frame * 1000 / 60);
       const start = performance.now();
@@ -119,6 +124,7 @@ app.whenReady().then(async () => {
       const s1 = new Visualizer(document.createElement('canvas'));
       const s2 = new Visualizer(document.createElement('canvas'));
       s1.width = s2.width = 208; s1.height = s2.height = 600;
+      s2.idleOffset = s1.idleOffset; // share the base field so the check isolates the scroll transient
       s1.setScrollVelocity(700);
       for (let f = 0; f <= 60; f++) { s1.draw(900000 + f * 1000 / 60); s2.draw(900000 + f * 1000 / 60); }
       check('scroll energy changes the idle frame', s1.canvas.toDataURL() !== s2.canvas.toDataURL());
@@ -147,7 +153,7 @@ app.whenReady().then(async () => {
       for (let r = 0; r < irows; r++) {
         const yNorm = r / Math.max(1, irows - 1);
         let sum = 0;
-        for (let c = 0; c < 12; c++) sum += iw.pixels[(c * irows + r) * 4 + 3];
+        for (let c = 0; c < COLS; c++) sum += iw.pixels[(c * irows + r) * 4 + 3];
         if (yNorm < 0.35) below += sum; else if (yNorm > 0.7) above += sum;
       }
       check('import wavefront fills from the bottom', below > above * 1.5);
@@ -161,6 +167,7 @@ app.whenReady().then(async () => {
       const pw = new Visualizer(document.createElement('canvas'));
       const pw2 = new Visualizer(document.createElement('canvas'));
       pw.width = pw2.width = 208; pw.height = pw2.height = 600;
+      pw2.idleOffset = pw.idleOffset; // share the base field so the check isolates the pulse transient
       for (let f = 0; f <= 150; f++) { pw.draw(970000 + f * 1000 / 60); pw2.draw(970000 + f * 1000 / 60); }
       pw.pulse('done');
       for (let f = 151; f <= 180; f++) { pw.draw(970000 + f * 1000 / 60); pw2.draw(970000 + f * 1000 / 60); }
@@ -172,6 +179,7 @@ app.whenReady().then(async () => {
       const sw = new Visualizer(document.createElement('canvas'));
       const sw2 = new Visualizer(document.createElement('canvas'));
       sw.width = sw2.width = 208; sw.height = sw2.height = 600;
+      sw2.idleOffset = sw.idleOffset; // share the base field so the check isolates the sweep transient
       for (let f = 0; f <= 150; f++) { sw.draw(980000 + f * 1000 / 60); sw2.draw(980000 + f * 1000 / 60); }
       sw.sweep();
       for (let f = 151; f <= 180; f++) { sw.draw(980000 + f * 1000 / 60); sw2.draw(980000 + f * 1000 / 60); }
@@ -179,14 +187,64 @@ app.whenReady().then(async () => {
       for (let f = 181; f <= 540; f++) { sw.draw(980000 + f * 1000 / 60); sw2.draw(980000 + f * 1000 / 60); }
       check('completion sweep decays cleanly', Math.max(...sw.pixels.map((vv, i) => Math.abs(vv - sw2.pixels[i]))) < 0.5);
 
-      // Perf with the reading current active.
+      // ---- v1.5.2 additions (grid redesign: 24 cols, ~12 fields, randomized
+      // idle start, finer ramp). Contracts asserted here are what viz.js must
+      // expose: COLS via instance state, plus IDLE_FIELDS / RAMP on the class.
+      check('lattice is 24 columns', COLS === 24);
+      const ramp = Visualizer.RAMP || [];
+      check('energy ramp is finer than the 4-stop v1.5 ramp', ramp.length >= 6
+        && ramp.every((s) => Array.isArray(s) && s.length === 3 && s.every(Number.isFinite)));
+      const fields = Visualizer.IDLE_FIELDS || [];
+      check('idle field set is ~12 fields', fields.length >= 11 && fields.length <= 12);
+      const slots = Visualizer.IDLE_SCHEDULE || [];
+      check('schedule gives every idle field exactly one slot', slots.length === fields.length
+        && new Set(slots.map((s) => s.field)).size === slots.length
+        && slots.every((s) => Number.isInteger(s.field) && s.field >= 0 && s.field < fields.length));
+      check('no field dissolves into itself (incl. wrap)', slots.length > 1 && slots.every((s, i) => s.field !== slots[(i + 1) % slots.length].field));
+
+      // Field purity: each field is a pure, finite function of (x, y, t).
+      // Sampled on a fixed seed grid; identical args must give bit-identical
+      // results (hash-seeded, no hidden state, no frame-count dependence).
+      const seeds = [];
+      for (const [sx, sy] of [[0.15, 0.3], [0.5, 0.5], [0.85, 0.7], [0.3, 0.9]]) for (const st of [1, 40, 99]) seeds.push([sx, sy, st]);
+      let pure = fields.length > 0;
+      for (const f of fields) for (const [x, y, t] of seeds) {
+        const v = f(x, y, t);
+        if (!Number.isFinite(v) || f(x, y, t) !== v) pure = false;
+      }
+      check('idle fields are pure, finite functions of (x,y,t)', pure);
+
+      // Randomized launch: fresh instances get distinct schedule phases in
+      // [0, total) — no two opens start the same.
+      const total = (typeof Visualizer.IDLE_TOTAL === 'number' && Visualizer.IDLE_TOTAL > 0)
+        ? Visualizer.IDLE_TOTAL : (slots.reduce((s, f) => s + f.dwell, 0) || 1);
+      const spawns = [0, 1, 2, 3].map(() => new Visualizer(document.createElement('canvas')));
+      const offs = spawns.map((v) => v.idleOffset);
+      check('idle start phase is randomized per launch', offs.every((o) => Number.isFinite(o) && o >= 0 && o < total) && new Set(offs).size > 1);
+
+      // The offset must be applied, not just stored: identical offset + clock
+      // is fully deterministic (seeded purity), a different offset renders a
+      // different frame.
+      const z1 = new Visualizer(document.createElement('canvas'));
+      const z2 = new Visualizer(document.createElement('canvas'));
+      const z3 = new Visualizer(document.createElement('canvas'));
+      z1.width = z2.width = z3.width = 208; z1.height = z2.height = z3.height = 600;
+      z1.idleOffset = 0; z2.idleOffset = 0; z3.idleOffset = total / 2;
+      for (let f = 0; f <= 90; f++) { z1.draw(1e6 + f * 1000 / 60); z2.draw(1e6 + f * 1000 / 60); z3.draw(1e6 + f * 1000 / 60); }
+      check('fixed offset + clock is fully deterministic', z1.pixels.every((v, i) => v === z2.pixels[i]));
+      check('different idle offsets render different frames', Math.max(...z1.pixels.map((v, i) => Math.abs(v - z3.pixels[i]))) > 0.01);
+      spawns.forEach((v) => v.destroy()); z1.destroy(); z2.destroy(); z3.destroy();
+
+      // Perf with the reading current active. 1.5.2 doubles the tile count
+      // (24 cols), so the budget is the 16 ms 60 fps floor, not the old 8 ms
+      // micro-budget that fit the 12-column grid.
       const pf = new Visualizer(document.createElement('canvas'));
       pf.width = 208; pf.height = 600;
       pf.setScrollVelocity(500);
       const t0 = performance.now();
       for (let f = 0; f <= 300; f++) pf.draw(990000 + f * 1000 / 60);
       const scrollFrameMs = (performance.now() - t0) / 300;
-      check('scroll-active frames remain under 8 ms', scrollFrameMs < 8);
+      check('scroll-active frames remain under the 16 ms budget', scrollFrameMs < 16);
       s1.destroy(); s2.destroy(); iw.destroy(); pw.destroy(); pw2.destroy(); sw.destroy(); sw2.destroy(); pf.destroy();
 
       window.visuals = visuals;

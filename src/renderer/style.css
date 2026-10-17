@@ -504,6 +504,11 @@ select:focus { border-color: var(--accent); }
   font-family: var(--font-mono); font-size: 10px; color: var(--muted);
   border-top: 1px solid var(--border); padding-top: 10px; white-space: pre-wrap; word-break: break-all;
 }
+.about-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.about-version { font-family: var(--font-mono); font-size: 11px; color: var(--muted-2); }
+.about-result { font-size: 11px; color: var(--muted); margin-top: 6px; line-height: 1.4; }
+.about-result.ok { color: var(--sage); }
+.about-result.err { color: var(--amber); }
 
 .modal {
   position: fixed; inset: 0; background: rgba(18,18,18,.72);
@@ -648,6 +653,14 @@ select:focus { border-color: var(--accent); }
 .theme-opt .vb::before { content: ''; }
 .seg { display: flex; gap: 4px; }
 .seg .btn.on { border-color: var(--accent); color: var(--paper-hi); background: var(--tint-accent-09); }
+
+/* theme dropdown (1.5.2): collapsed by default; the head reuses .theme-opt art */
+.theme-dd { position: relative; margin-bottom: 8px; }
+.theme-dd-head { width: 100%; }
+.theme-dd-head .chev { margin-left: auto; font-size: 10px; color: var(--muted); transition: transform var(--t-fast) var(--ease-out); }
+.theme-dd.open .chev { transform: rotate(180deg); }
+.theme-dd-list { display: none; margin-top: 6px; }
+.theme-dd.open .theme-dd-list { display: grid; }
 
 /* ---------------------------------------------------------------- theme swap (v1.5)
    667 ms cross-fade with a 111 ms stagger: the window "portions" (chrome surfaces)

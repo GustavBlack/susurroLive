@@ -680,17 +680,38 @@ async function runSmoke() {
     fs.mkdirSync(path.dirname(out), { recursive: true });
     fs.writeFileSync(out, img.toPNG());
 
-    // 2) settings drawer, to exercise the model manager
-    await win.webContents.executeJavaScript("document.getElementById('btnSettings').click()");
-    await new Promise((r) => setTimeout(r, 1200));
+    // 2) settings drawer, to exercise the model manager. boot/wire is async, so
+    //    poll until the drawer is actually visible before capturing.
+    let drawerGeom = '';
+    for (let i = 0; i < 50 && !/true/.test(drawerGeom); i++) {
+      await win.webContents.executeJavaScript("document.getElementById('btnSettings')?.click()");
+      await new Promise((r) => setTimeout(r, 200));
+      drawerGeom = await win.webContents.executeJavaScript(
+        '(() => { const d = document.getElementById("settingsDrawer");' +
+        ' const r = d.getBoundingClientRect();' +
+        ' return JSON.stringify({ open: !d.classList.contains("hidden"), x: r.x, w: r.width, vw: innerWidth, dpr: devicePixelRatio, disp: getComputedStyle(d).display }); })()');
+    }
+    console.log('[smoke] drawer geom  :', drawerGeom);
+    const hitTest = await win.webContents.executeJavaScript(
+      '(() => { const el = document.elementFromPoint(640, 500);' +
+      ' return el ? (el.id || el.className || el.tagName) : "none"; })()');
+    console.log('[smoke] hit @640,500:', hitTest);
     img = await win.webContents.capturePage();
     const out2 = smokePath('_smoke_settings.png');
     fs.writeFileSync(out2, img.toPNG());
 
     // 2.5) v1.5 theme swap: pick Tokyo Night, verify staged animation + persistence.
     const themeCheck = await win.webContents.executeJavaScript(`(async () => {
+      let head = null;
+      for (let i = 0; i < 50 && !head; i++) {   // wire() may still be awaiting boot
+        head = document.querySelector('.theme-dd-head');
+        if (!head) await new Promise((r) => setTimeout(r, 100));
+      }
+      if (!head) return JSON.stringify({ fail: 'no theme dropdown head rendered' });
+      head.click();                             // expand the dropdown list
+      await new Promise((r) => setTimeout(r, 120));
       let opt = null;
-      for (let i = 0; i < 50 && !opt; i++) {   // wire() may still be awaiting boot
+      for (let i = 0; i < 50 && !opt; i++) {
         opt = document.querySelector('.theme-opt[data-id="tokyo"]');
         if (!opt) await new Promise((r) => setTimeout(r, 100));
       }
@@ -730,6 +751,27 @@ async function runSmoke() {
       const opt = document.querySelector('.theme-opt[data-id="default"]');
       if (opt) { opt.click(); await new Promise((r) => setTimeout(r, 900)); }
     })()`);
+
+    // 2.6) About block: manual update check must give inline feedback (in dev the
+    // feed is unconfigured, so the expected result is the portable/dev notice).
+    const aboutCheck = await win.webContents.executeJavaScript(`(async () => {
+      const btn = document.getElementById('btnCheckUpdate');
+      const res = document.getElementById('updateResult');
+      if (!btn || !res) return JSON.stringify({ fail: 'about block missing' });
+      const ver = document.getElementById('aboutVersion')?.textContent || '';
+      btn.click();
+      for (let i = 0; i < 40 && !res.textContent; i++) await new Promise((r) => setTimeout(r, 100));
+      await new Promise((r) => setTimeout(r, 300));
+      return JSON.stringify({ ver, feedback: res.textContent, shown: !res.classList.contains('hidden') });
+    })()`);
+    console.log('[smoke] about check  :', aboutCheck);
+    try {
+      const ac = JSON.parse(aboutCheck);
+      if (ac.fail || !ac.ver.includes('susurroLive') || !ac.feedback) {
+        console.error(`[smoke] FAILED: about block wrong: ${aboutCheck}`);
+        process.exitCode = 1;
+      }
+    } catch { /* non-fatal */ }
 
     // 3) back to the main view, then shrink the window so the transcript definitely
     //    overflows - otherwise there is no scrollbar on screen to inspect.
