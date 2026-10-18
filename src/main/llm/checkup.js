@@ -175,7 +175,11 @@ async function runCheckup({ session, settings, signal, onProgress, chatFn, vocab
     ? session.transcript.words : [];
   if (!words.length) throw new Error('session has no transcript words to check');
 
-  const contextTokens = Number(settings && settings.llmContextTokens) || 8192;
+  // Cap the batching budget: a 1M-token endpoint setting (common when it was probed from a
+  // big-context model) would otherwise pack a whole long session into ONE request — no visible
+  // progress and every correction in a single round trip. 32k tokens of transcript per batch is
+  // already ~25k words; past that, more batching only costs latency.
+  const contextTokens = Math.min(Number(settings && settings.llmContextTokens) || 8192, 32768);
   const batches = buildBatches(words, contextTokens);
   const speakerAt = words.some((w) => typeof w.speaker === 'string')
     ? (i) => (words[i] && words[i].speaker) || null

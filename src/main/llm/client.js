@@ -142,32 +142,49 @@ function extractJson(text) {
   return null;
 }
 
-async function chat({ base, key, model, messages, contextTokens, signal, temperature, thinking }) {
-  const url = String(base || '').replace(/\/+$/, '') + '/chat/completions';
+// The checkup asks for a tiny JSON answer, but thinking models happily burn thousands of
+// reasoning tokens on it (measured on the local GLM-5.3-Flash: 4.9k reasoning tokens and ~90 s
+// for a 200-word batch, vs 1.6 s with thinking disabled). So the request asks the server to skip
+// thinking via `chat_template_kwargs` (vLLM/GLM convention) and keeps a small max_tokens; if a
+// server rejects that field (400) or answers with empty content (a model that ignores the hint
+// and spends its whole budget thinking), retry once WITHOUT the hint and a thinking-sized budget.
+const MAX_TOKENS_FAST = 2048;
+const MAX_TOKENS_THINK = 8192;
+const REQUEST_TIMEOUT_MS = 300000;
+
+function bodyFor({ model, messages, temperature, contextTokens, fast }) {
   const body = {
     model,
     messages,
     temperature: typeof temperature === 'number' ? temperature : 0,
     stream: false,
   };
-  if (Number.isFinite(contextTokens) && contextTokens > 0) {
-    body.max_tokens = Math.max(256, Math.floor(contextTokens * 0.25));
-  }
+  const cap = fast ? MAX_TOKENS_FAST : MAX_TOKENS_THINK;
+  const byCtx = Number.isFinite(contextTokens) && contextTokens > 0
+    ? Math.max(256, Math.floor(contextTokens * 0.25))
+    : cap;
+  body.max_tokens = Math.min(cap, byCtx);
+  if (fast) body.chat_template_kwargs = { enable_thinking: false };
+  return body;
+}
+
+async function postOnce({ url, key, body, signal }) {
   const ctrl = new AbortController();
   const onAbort = () => ctrl.abort();
   if (signal) {
     if (signal.aborted) ctrl.abort();
     else signal.addEventListener('abort', onAbort, { once: true });
   }
-  const timer = setTimeout(() => ctrl.abort(), 120000);
-  let res;
+  const timer = setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT_MS);
   try {
-    res = await fetch(url, {
+    const res = await fetch(url, {
       method: 'POST',
       headers: headers(key),
       body: JSON.stringify(body),
       signal: ctrl.signal,
     });
+    const text = await res.text();
+    return { res, text };
   } catch (e) {
     if (signal && signal.aborted) throw new LLMError('cancelled');
     throw new LLMTimeout();
@@ -175,13 +192,56 @@ async function chat({ base, key, model, messages, contextTokens, signal, tempera
     clearTimeout(timer);
     if (signal) signal.removeEventListener('abort', onAbort);
   }
+}
+
+function rejectsThinkingHint(text, status) {
+  if (status !== 400) return false;
+  return /chat_template_kwargs|enable_thinking|unknown|unexpected|extra/i.test(text || '');
+}
+
+async function chat({ base, key, model, messages, contextTokens, signal, temperature, thinking }) {
+  const url = String(base || '').replace(/\/+$/, '') + '/chat/completions';
+  const fast = thinking !== 'on';            // 'auto' and 'off' both try the no-thinking path
+
+  let attempt = await postOnce({
+    url, key, signal,
+    body: bodyFor({ model, messages, temperature, contextTokens, fast }),
+  });
+
+  // Server doesn't know the hint — drop it and think normally.
+  if (fast && rejectsThinkingHint(attempt.text, attempt.res.status)) {
+    attempt = await postOnce({
+      url, key, signal,
+      body: bodyFor({ model, messages, temperature, contextTokens, fast: false }),
+    });
+  }
+
+  let { res, text } = attempt;
   if (res.status === 401 || res.status === 403) throw new LLMAuthError();
   if (res.status === 404) throw new LLMBadEndpoint();
   if (!res.ok) throw new LLMHttpError(res.status);
   let data;
-  try { data = await res.json(); } catch { throw new LLMBadEndpoint(); }
-  const msg = data && data.choices && data.choices[0] && data.choices[0].message;
+  try { data = JSON.parse(text); } catch { throw new LLMBadEndpoint(); }
+  let msg = data && data.choices && data.choices[0] && data.choices[0].message;
   if (!msg) throw new LLMBadEndpoint();
+
+  // The hint was accepted but ignored: the model thought through its whole small budget and
+  // returned no content. Retry once with the thinking-sized budget before giving up.
+  const empty = !msg.content || !String(msg.content).trim();
+  if (fast && empty && thinking !== 'off') {
+    attempt = await postOnce({
+      url, key, signal,
+      body: bodyFor({ model, messages, temperature, contextTokens, fast: false }),
+    });
+    ({ res, text } = attempt);
+    if (res.status === 401 || res.status === 403) throw new LLMAuthError();
+    if (res.status === 404) throw new LLMBadEndpoint();
+    if (!res.ok) throw new LLMHttpError(res.status);
+    try { data = JSON.parse(text); } catch { throw new LLMBadEndpoint(); }
+    msg = data && data.choices && data.choices[0] && data.choices[0].message;
+    if (!msg) throw new LLMBadEndpoint();
+  }
+
   const reasoning = typeof msg.reasoning_content === 'string' ? msg.reasoning_content
     : (typeof msg.reasoning === 'string' ? msg.reasoning : null);
   const thinkStrip = thinking !== 'off';

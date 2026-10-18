@@ -16,6 +16,8 @@ native/bin/
 native/models/
 native/src/
 native/_*
+# dev-only parakeet provisioning target (engine + int8 model, ~680 MB)
+sherpa/
 
 # local env / secrets
 .env

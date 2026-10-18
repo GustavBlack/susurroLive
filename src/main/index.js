@@ -790,6 +790,11 @@ async function runSmoke() {
   try {
     await new Promise((r) => setTimeout(r, 2200));
 
+    // Snapshot the engine BEFORE any stage runs: the engine-first stage flips the select
+    // (and the renderer persists whisper), so capturing it later would record the flip as
+    // the user's choice and the end-of-smoke restore would write whisper back to real settings.
+    const engineAtStart = settings.get('engine');
+
     // Smoke artifacts live in the repo during dev; a packaged build has no repo,
     // so land them in temp instead (the asar is not a writable directory).
     const smokeDir = app.isPackaged ? app.getPath('temp') : path.join(REPO_ROOT, 'native');
@@ -980,6 +985,7 @@ async function runSmoke() {
       llmEndpoint: settings.get('llmEndpoint'),
       llmApiKey: settings.get('llmApiKey'),
       llmModel: settings.get('llmModel'),
+      engine: engineAtStart,
       lastSessionParent: settings.get('lastSessionParent'),
     };
     settings.set({
@@ -1023,6 +1029,67 @@ async function runSmoke() {
       }
     } catch { /* non-fatal */ }
 
+    // 2.8b) regression: a diarization that finishes IN THE OPEN WINDOW must resolve the gate.
+    // Main emits the block identity on the transcript event, but session:current is not
+    // re-fetched — the renderer has to fold that identity into S.session, or the button stays
+    // hidden until the session is reopened (real 1.6.0 bug: user ran a diarize, then never saw
+    // the checkup button).
+    const fxB = store.createSession({
+      parentDir: fxParent, name: 'smoke-checkup-inwindow',
+      settings: { model: 'small.en' }, gpu: null,
+      model: { name: 'small.en', engine: 'whisper' }, chunkSec: 12, sources: [],
+    });
+    fxB.recording.startedAt = new Date().toISOString();
+    fxB.recording.stoppedAt = new Date().toISOString();
+    fxB.recording.durationSec = 24;
+    fxB.chunks = [0, 1].map((k) => ({
+      index: k, offsetSec: k * 12, durationSec: 12,
+      audioFile: `audio/chunk_000${k}.wav`, status: 'done', engine: 'demo',
+      words: mkWords(30),
+    }));
+    store.writeSession(fxB.folder, fxB);
+
+    const beforeDiar = await win.webContents.executeJavaScript(`(async () => {
+      const poll = async (fn, ms = 6000) => {
+        const t0 = Date.now();
+        for (;;) { const v = await fn(); if (v) return v; if (Date.now() - t0 > ms) return null; await new Promise((r) => setTimeout(r, 150)); }
+      };
+      document.getElementById('btnSessions')?.click();
+      const item = await poll(async () => [...document.querySelectorAll('.sess-item')]
+        .find((x) => /smoke-checkup-inwindow/.test(x.textContent)) || null);
+      if (!item) return JSON.stringify({ fail: 'fixture not listed' });
+      item.click();
+      await poll(() => (document.getElementById('transcript')?.children.length || 0) > 0 || null);
+      await new Promise((r) => setTimeout(r, 400));
+      return JSON.stringify({
+        hidden: document.getElementById('btnAiCheckup').classList.contains('hidden'),
+      });
+    })()`);
+    let bd = {};
+    try { bd = JSON.parse(beforeDiar); } catch { bd = { fail: String(beforeDiar) }; }
+    console.log('[smoke] checkup hidden (diar pending)  :', bd.hidden, bd.fail ? `(${bd.fail})` : '');
+    if (bd.fail || bd.hidden !== true) {
+      console.error(`[smoke] FAILED: AI checkup button visible before diarization resolved: ${beforeDiar}`);
+      process.exitCode = 1;
+    }
+
+    // Same session, real event path: main pushes the finished block on the transcript channel.
+    send('transcript', {
+      words: mkWords(60),
+      segments: [],
+      fullText: 'smoke in-window diarization',
+      wordSpeakers: [],
+      diarization: { speakers: 1, createdAt: new Date().toISOString() },
+    });
+    await new Promise((r) => setTimeout(r, 400));
+    const afterDiar = await win.webContents.executeJavaScript(
+      'document.getElementById("btnAiCheckup").classList.contains("hidden")');
+    console.log('[smoke] checkup visible (diar done)    :', afterDiar === false);
+    if (afterDiar !== false) {
+      console.error('[smoke] FAILED: AI checkup button did not appear after an in-window diarization');
+      process.exitCode = 1;
+    }
+
     // force a fake recording status through the real event path — the button must hide.
     send('recordState', { recording: true, paused: false });
     await new Promise((r) => setTimeout(r, 300));
@@ -1047,18 +1114,26 @@ async function runSmoke() {
         if (el.type === 'checkbox') { el.checked = value; } else { el.value = value; }
         el.dispatchEvent(new Event('change'));
       };
-      flip('setLlmCheckup', false);
-      flip('setLlmEndpoint', '');
-      flip('setLlmModel', '');
+      flip('setLlmCheckup', ${prevSettings.llmCheckup === true});
+      flip('setLlmEndpoint', ${JSON.stringify(prevSettings.llmEndpoint || '')});
+      flip('setLlmModel', ${JSON.stringify(prevSettings.llmModel || '')});
+      // The engine is restored through the STORE, not the select: in dev an unprovisioned
+      // parakeet makes the select's handler offer a 510 MB download instead of persisting.
     })()`);
-    settings.set({ llmApiKey: prevSettings.llmApiKey, lastSessionParent: prevSettings.lastSessionParent });
+    settings.set({ engine: prevSettings.engine || 'whisper', llmApiKey: prevSettings.llmApiKey, lastSessionParent: prevSettings.lastSessionParent });
     send('recordState', { recording: false, paused: false });
     await new Promise((r) => setTimeout(r, 300));
+    // The restore must put back the USER's real checkup config — this smoke runs against the
+    // same userData, so the expected button state depends on what was configured beforehand.
+    // (It used to force blanks, which silently wiped a real endpoint/model on every smoke run.)
+    const expectHiddenAfterRestore = !(prevSettings.llmCheckup === true
+      && prevSettings.llmEndpoint && prevSettings.llmModel);
     const hiddenRestored = await win.webContents.executeJavaScript(
       'document.getElementById("btnAiCheckup").classList.contains("hidden")');
-    console.log('[smoke] checkup hidden (restored off)   :', hiddenRestored);
-    if (hiddenRestored !== true) {
-      console.error('[smoke] FAILED: AI checkup button still visible after settings restore');
+    console.log('[smoke] checkup hidden (after restore)  :', hiddenRestored,
+      '| expected:', expectHiddenAfterRestore);
+    if (hiddenRestored !== expectHiddenAfterRestore) {
+      console.error('[smoke] FAILED: AI checkup button state after restore does not match the pre-smoke config');
       process.exitCode = 1;
     }
 

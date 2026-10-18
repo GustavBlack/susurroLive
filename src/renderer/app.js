@@ -562,6 +562,12 @@ function setTranscriptData({ words, segments, wordSpeakers, diarization, drifted
   S.segments = segments || [];
   S.wordSpeakers = wordSpeakers || [];
   if (driftedChunkIds) S.driftedChunkIds = driftedChunkIds;
+  // Keep the open session's snapshot in step with the diarization block. Main emits this
+  // identity on the transcript event whenever a run finishes, but S.session (session:current)
+  // is only re-fetched on open — without this the checkup gate's diarizationResolved() stayed
+  // false after a diarize in the current window, so the AI checkup button never appeared until
+  // the session was closed and reopened (regression guard: smoke stage 2.8b).
+  if (diarization && S.session) S.session.diarization = diarization;
   S.diarSpeakers = diarization?.speakers || 0;
   const at = diarization?.createdAt || null;
   if (at !== S.diarizedAt) {
@@ -677,15 +683,20 @@ function renderCheckupUI() {
   if (!btn) return;
   const st = S.settings || {};
   const configured = st.llmCheckup === true && !!st.llmEndpoint && !!st.llmModel;
+  // Keep the button MOUNTED while a run is live: it turns into the progress affordance. Hiding it
+  // on click left the user with no visual signal that anything was happening.
   const show = configured && !!S.session && S.words.length > 0
-    && pipelineIdle() && diarizationResolved() && !S.checkupRunning;
+    && pipelineIdle() && diarizationResolved();
   btn.classList.toggle('hidden', !show);
   btn.classList.toggle('busy', S.checkupRunning);
+  btn.disabled = S.checkupRunning;
+  btn.setAttribute('aria-busy', S.checkupRunning ? 'true' : 'false');
+  const prog = S.checkupProgress;
   btn.textContent = S.checkupRunning
-    ? `Checking…${S.checkupProgress ? ` ${S.checkupProgress.done}/${S.checkupProgress.total}` : ''}  ✕`
+    ? (prog && prog.total > 1 ? `Processing… ${prog.done}/${prog.total}` : 'Processing…')
     : '✦ AI checkup';
   btn.title = S.checkupRunning
-    ? 'Checking the transcript — click to cancel'
+    ? 'The transcript is being checked — you can keep working'
     : 'Send the transcript to your AI endpoint for a correction pass';
 
   const ck = S.session?.checkup;
