@@ -692,3 +692,64 @@ html.theme-anim * {
     fill var(--t-theme) var(--ease-out) var(--t-theme-delay),
     stroke var(--t-theme) var(--ease-out) var(--t-theme-delay);
 }
+
+/* ---------------------------------------------------------------- AI transcript checkup (1.6.0) */
+/* Accent-styled via the theme tokens — no hardcoded colors. */
+.btn.llm-checkup {
+  border-color: var(--accent);
+  color: var(--ink-000);
+  background: var(--accent-strong);
+}
+.btn.llm-checkup:hover:not(:disabled) {
+  border-color: var(--accent-strong);
+  color: var(--ink-000);
+  filter: brightness(1.08);
+}
+#btnAiCheckup.busy { color: var(--muted-2); background: transparent; font-variant-numeric: tabular-nums; }
+#btnAiCheckup.busy:hover { color: var(--paper-hi); border-color: var(--rust); }
+#btnAiCheckup.busy::before {
+  content: '';
+  display: inline-block;
+  width: 9px; height: 9px;
+  margin-right: 6px;
+  border: 1.5px solid var(--muted);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  vertical-align: -1px;
+  animation: spin 900ms linear infinite;
+}
+@media (prefers-reduced-motion: reduce) { #btnAiCheckup.busy::before { animation: none; } }
+
+/* presentation-only marks on transcript words */
+.transcript .w.ck-fixed { box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--accent) 55%, transparent); }
+.transcript .w.ck-fixed:hover { background: var(--tint-accent-09); }
+.transcript .w.ck-drifted {
+  color: var(--amber);
+  text-decoration: underline dotted color-mix(in srgb, var(--amber) 70%, transparent);
+  text-underline-offset: 3px;
+}
+
+/* checkup settings block */
+.hint { display: block; font-size: 10px; color: var(--muted); line-height: 1.5; margin: 4px 0 8px; }
+.llm-row { display: flex; align-items: flex-end; gap: 8px; margin: 6px 0 10px; }
+.llm-row .field { margin-bottom: 0; }
+.llm-row input[type="text"], .llm-row input:not([type]) { flex: 1; }
+#vocabTerms {
+  width: 100%; box-sizing: border-box;
+  background: var(--ink-250); color: var(--paper);
+  border: 1px solid var(--border); border-radius: var(--r-ctrl);
+  font-family: var(--font-mono); font-size: 11px;
+  padding: 6px 8px; resize: vertical;
+}
+#vocabTerms:focus { border-color: var(--accent); outline: none; }
+#vocabTerms:disabled { opacity: .45; }
+.vocab-row {
+  display: flex; align-items: center; gap: 7px;
+  padding: 5px 8px; margin-bottom: 4px;
+  background: var(--ink-250); border: 1px solid var(--border);
+  border-radius: var(--r-ctrl); font-size: 11px; color: var(--muted-2);
+  cursor: pointer;
+}
+.vocab-row.sel { border-color: var(--accent); color: var(--paper-hi); }
+.vocab-row .vocab-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vocab-row .vocab-count { font-family: var(--font-mono); font-size: 10px; color: var(--muted); }

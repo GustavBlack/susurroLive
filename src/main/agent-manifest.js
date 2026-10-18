@@ -20,7 +20,7 @@ const fs = require('fs');
 const path = require('path');
 
 const FILENAME = 'AGENTS.md';
-const MANIFEST_VERSION = 4;
+const MANIFEST_VERSION = 5;
 
 const TEMPLATE = `# AGENTS.md — how to read this susurroLive session folder
 
@@ -107,7 +107,7 @@ Its \`words[].t\` are **chunk-local**, exactly like \`session.json → chunks[].
   "type": "object",
   "required": ["version", "chunks", "transcript"],
   "properties": {
-    "version": { "type": "integer", "const": 1, "description": "Schema version; gates migrations." },
+    "version": { "type": "integer", "const": 2, "description": "Schema version; gates migrations." },
     "id": { "type": "string", "description": "UUID v4 for this session." },
     "name": { "type": "string" },
     "folder": { "type": "string", "description": "Absolute path recorded at creation; may be stale if the folder was moved." },
@@ -235,6 +235,33 @@ Its \`words[].t\` are **chunk-local**, exactly like \`session.json → chunks[].
         "audioSec": { "type": ["number", "null"], "description": "Length of the audio that was diarized, seconds." },
         "speakers": { "type": "integer", "minimum": 0, "description": "Distinct speakers found." },
         "turns": { "type": "array", "items": { "$ref": "#/$defs/turn" } }
+      }
+    },
+    "checkup": {
+      "type": ["object", "null"],
+      "description": "OPTIONAL. Present only after the user ran the AI transcript checkup (an opt-in LLM correction pass). transcript.words are ALWAYS the original ASR output and are never mutated; corrections live in checkup.edits and are applied at read time. checkup.active selects which view the UI and every export show.",
+      "properties": {
+        "active": { "type": "boolean", "description": "The corrected/original toggle: true means the UI and exports project the corrected words; false means the original transcript." },
+        "model": { "type": "string", "description": "LLM model id that produced the corrections." },
+        "endpoint": { "type": "string", "description": "OpenAI-compatible endpoint base URL used." },
+        "applied": { "type": "integer", "description": "Number of one-to-one word corrections in edits." },
+        "batches": { "type": "integer", "description": "Number of batches the transcript was split into." },
+        "at": { "type": "string", "description": "ISO-8601 time the checkup ran." },
+        "vocabulary": { "type": "array", "items": { "type": "string" }, "description": "Snapshot of the vocabulary terms that were in the prompt." },
+        "chunkHashes": { "type": "object", "description": "Per-chunk fingerprint map: chunk id -> FNV-1a hex of that chunk's word texts at checkup time. Drift detection compares against it." },
+        "edits": {
+          "type": "array",
+          "description": "One-to-one word replacements over the ORIGINAL stored words. Never add, delete, or reorder.",
+          "items": {
+            "type": "object",
+            "required": ["i", "orig", "w"],
+            "properties": {
+              "i": { "type": "integer", "description": "Index into transcript.words." },
+              "orig": { "type": "string", "description": "The original word text; the edit applies only while the stored word still equals it." },
+              "w": { "type": "string", "description": "The corrected word text. t and d are never touched." }
+            }
+          }
+        }
       }
     }
   },
@@ -376,6 +403,20 @@ def speaker_of(word, turns, max_gap=1.0):
 
 Show \`spk0\` as "Speaker 1", \`spk1\` as "Speaker 2", and so on. \`None\` means no speaker could
 be attributed (usually a word in a long silence gap).
+
+### 4.7 The AI checkup block (only if \`checkup\` is present)
+
+\`transcript.words\` are **always the original transcript** — they are never mutated.
+Corrections live in \`checkup.edits\` as one-to-one replacements (\`{i, orig, w}\`: word index,
+original text, corrected text) and are applied at read time: an edit applies only when the
+stored word still equals \`orig\` and the word's chunk fingerprint matches
+\`checkup.chunkHashes\` (chunk id -> FNV-1a hex of that chunk's word texts at checkup time).
+\`t\` and \`d\` are never changed. \`checkup.active\` selects the view: \`true\` means the app's
+UI and **every export** show the corrected words, \`false\` the original. A re-transcribed
+chunk whose fingerprint no longer matches has **drifted**: its edits are dropped, its words
+show original text, and it stays that way until the checkup runs again. To reconstruct the
+corrected text yourself, apply the same rule: for each edit, if \`words[i].w === orig\` and the
+chunk hash matches, set \`words[i].w = w\`; never add, delete, or reorder words.
 
 ## 5 · Rules that break naive readers
 

@@ -16,6 +16,12 @@ const DEFAULTS = {
   diarizeAutoOnStop: false,  // identify speakers once a stopped/imported session is transcribed
   theme: 'default',          // v1.5 theme id — see src/renderer/theme/themes.js
   themeMode: 'dark',         // dark | light
+  llmCheckup: false,         // master opt-in; the AI checkup is dead unless true
+  llmEndpoint: '',           // e.g. http://127.0.0.1:1234/v1 (base, no /chat/completions)
+  llmApiKey: '',             // '' = endpoint requires no key
+  llmModel: '',              // model id as the endpoint names it
+  llmContextTokens: 8192,    // overwritten by probe when the endpoint exposes it
+  llmThinking: 'auto',       // auto | off (off skips the think-tag strip)
 };
 
 function createSettings(userDataDir) {

@@ -119,6 +119,18 @@ async function main() {
   stub._emitError('network down');
   check('state.error set', state2.error === 'network down');
 
+  // ---- 5. payloads must be structured-clone safe -----------------------------------
+  // A payload carrying state.check/download/install (functions) is silently DROPPED by
+  // webContents.send ("Failed to serialize arguments") — the pill never updates on
+  // installed builds. Regression guard for the 1.6.0 push() fix.
+  console.log('--- 5. updateStatus payloads structured-clone safe ---');
+  let cloneFailures = 0;
+  for (const p of events) {
+    try { structuredClone(p); } catch { cloneFailures++; }
+  }
+  check('every payload structured-clones', cloneFailures === 0, `${events.length} payloads, ${cloneFailures} uncloneable`);
+  check('payloads carry no function values', events.every((p) => Object.values(p).every((v) => typeof v !== 'function')));
+
   restoreElectron2();
 
   console.log(`\nRESULT: ${failures === 0 ? 'PASS' : 'FAIL'}`);

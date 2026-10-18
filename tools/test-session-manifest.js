@@ -148,7 +148,18 @@ session.diarization = block;
 store.writeSession(folder, session);
 const reopened = store.openSession(folder);
 check('block round-trips through write/open', reopened.ok && JSON.stringify(reopened.session.diarization) === JSON.stringify(block));
-check('schema version is still 1 (additive block, no bump)', reopened.session.version === 1 && store.SCHEMA_VERSION === 1);
+check('schema version is 2 (checkup block shape change)', reopened.session.version === 2 && store.SCHEMA_VERSION === 2);
+
+session.checkup = {
+  active: true, model: 'qwen3-8b', endpoint: 'http://127.0.0.1:1234/v1', applied: 1, batches: 1,
+  at: '2026-10-18T04:12:00Z', vocabulary: ['PartUV'], chunkHashes: { '0': '1a2b9c' },
+  edits: [{ i: 0, orig: 'war', w: 'was' }], futureKey: 'tolerated',
+};
+const up2 = store.writeSession(folder, session);
+const reopened2 = store.openSession(folder);
+check('checkup block round-trips through write/open',
+  reopened2.ok && reopened2.session.checkup?.edits?.length === 1 && reopened2.session.checkup?.futureKey === 'tolerated');
+delete session.checkup;
 
 const raw = JSON.parse(fs.readFileSync(path.join(folder, 'session.json'), 'utf8'));
 raw.diarization = { turns: 'corrupt' };

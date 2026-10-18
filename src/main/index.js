@@ -27,6 +27,9 @@ const ffmpegBridge = require('./ffmpeg');
 const { importMedia } = require('./importer');
 const diarizer = require('./diarizer');   // called through the module so tests can stub runDiarize
 const { buildBlock, wordSpeakersFor } = require('./diarize-join');
+const { probeModels } = require('./llm/client');
+const { runCheckup, applyCheckup } = require('./llm/checkup');
+const { createVocabulary } = require('./llm/vocabulary');
 const { initUpdater } = require('./updater');
 
 const SMOKE = process.argv.includes('--smoke');
@@ -53,6 +56,8 @@ let active = null;           // active session object
 let recording = false;
 let importing = false;
 let diarizeRun = null;       // { folder, child } while a diarize run is in flight
+let checkupRun = null;       // { folder, ctrl } while an LLM checkup run is in flight
+let vocabulary = null;       // createVocabulary(userData) — built once after app ready
 let autoDiarizeFolder = null; // session to diarize once its transcription goes idle
 let updaterState = null;
 
@@ -62,11 +67,24 @@ function send(evt, payload) {
 
 const samePath = (a, b) => !!a && !!b && path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase();
 
+/**
+ * Read-time projection for the AI checkup: corrected words + drifted chunk ids when a
+ * checkup block exists, null otherwise (plain words array — the renderer handles both).
+ * NEVER mutates the stored transcript.
+ */
+function projectedCheckup(session) {
+  if (!session || !session.checkup) return null;
+  const { words, driftedChunkIds } = applyCheckup(session.transcript.words || [], session.checkup);
+  return { words, driftedChunkIds };
+}
+
 /** Push the merged transcript; wordSpeakers is derived from the SAME words array. */
 function sendTranscript() {
   if (!active) return;
+  const proj = projectedCheckup(active);
   send('transcript', {
-    words: active.transcript.words,
+    words: proj ? proj.words : active.transcript.words,
+    ...(proj ? { driftedChunkIds: proj.driftedChunkIds } : {}),
     segments: active.transcript.segments,
     fullText: active.transcript.fullText,
     wordSpeakers: wordSpeakersFor(active),
@@ -109,6 +127,21 @@ function saveDiarization(folder, block) {
   }
   try {
     return store.updateSessionFile(folder, (s) => { s.diarization = block; });
+  } catch (err) {
+    return { ok: false, error: String(err.message || err) };
+  }
+}
+
+/** Store a finished checkup block in its OWN session, even if the user switched mid-run. */
+function saveCheckupBlock(folder, block) {
+  if (active && samePath(active.folder, folder)) {
+    active.checkup = block;
+    persist();
+    sendTranscript();
+    return { ok: true };
+  }
+  try {
+    return store.updateSessionFile(folder, (s) => { s.checkup = block; });
   } catch (err) {
     return { ok: false, error: String(err.message || err) };
   }
@@ -167,10 +200,13 @@ function persist() {
 function publicSession() {
   if (!active) return null;
   const full = path.join(active.folder, 'audio', 'full.wav');
+  const proj = projectedCheckup(active);
   return {
     ...active,
     audioUrl: fs.existsSync(full) ? pathToFileURL(full).href : null,
     wordSpeakers: wordSpeakersFor(active),
+    // the projected view (corrected words + drift) when a checkup block exists
+    ...(proj ? { transcript: { ...active.transcript, words: proj.words, driftedChunkIds: proj.driftedChunkIds } } : {}),
   };
 }
 
@@ -616,6 +652,90 @@ function registerIpc() {
     return { ok: true };
   });
 
+  // -------- AI transcript checkup (opt-in, non-destructive LLM corrections) --------
+  ipcMain.handle('llm:probe', async () => {
+    try {
+      const r = await probeModels(settings.get('llmEndpoint'), settings.get('llmApiKey'));
+      return { ok: true, models: r.models, contextTokens: r.contextTokens };
+    } catch (err) {
+      return { ok: false, error: String(err.message || err) };
+    }
+  });
+
+  ipcMain.handle('llm:checkup:run', async () => {
+    if (!active) return { ok: false, error: 'no session' };
+    if (recording) return { ok: false, error: 'stop recording before running the AI checkup' };
+    if (importing) return { ok: false, error: 'wait for the import to finish' };
+    if (pipeline && pipeline.remaining > 0) return { ok: false, error: 'wait for transcription to finish' };
+    if (diarizeRun) return { ok: false, error: 'wait for speaker diarization to finish' };
+    if (!active.transcript?.words?.length) return { ok: false, error: 'nothing transcribed yet' };
+    if (checkupRun) return { ok: false, error: 'an AI checkup run is already active' };
+    if (!settings.get('llmCheckup')) return { ok: false, error: 'the AI checkup feature is disabled — enable it in Settings' };
+    if (!settings.get('llmEndpoint')) return { ok: false, error: 'no endpoint configured — see Settings → AI transcript checkup' };
+    if (!settings.get('llmModel')) return { ok: false, error: 'no model configured — see Settings → AI transcript checkup' };
+
+    const folder = active.folder;
+    const ctrl = new AbortController();
+    checkupRun = { folder, ctrl };
+    try {
+      const block = await runCheckup({
+        session: active,
+        settings: settings.all(),
+        signal: ctrl.signal,
+        onProgress: (p) => send('llmCheckupProgress', p),
+        vocabulary: vocabulary ? vocabulary.activeTerms() : [],
+      });
+      const saved = saveCheckupBlock(folder, block);   // words on disk are NEVER mutated
+      if (!saved.ok) {
+        send('llmCheckupError', { message: saved.error });
+        return saved;
+      }
+      send('llmCheckupDone', { applied: block.applied });
+      return { ok: true, applied: block.applied, batches: block.batches };
+    } catch (err) {
+      const cancelled = ctrl.signal.aborted || /cancelled/i.test(String(err.message || err));
+      send('llmCheckupError', { message: String(err.message || err), cancelled });
+      return { ok: false, error: String(err.message || err), cancelled };
+    } finally {
+      checkupRun = null;
+    }
+  });
+
+  ipcMain.handle('llm:checkup:cancel', () => {
+    if (!checkupRun) return { ok: false, error: 'no AI checkup run is active' };
+    checkupRun.ctrl.abort();
+    return { ok: true };
+  });
+
+  ipcMain.handle('llm:checkup:toggle', (_e, flag) => {
+    if (!active) return { ok: false, error: 'no session' };
+    if (!active.checkup) return { ok: false, error: 'no checkup block on this session' };
+    active.checkup.active = flag === true;
+    persist();
+    sendTranscript();
+    return { ok: true, active: active.checkup.active, session: publicSession() };
+  });
+
+  ipcMain.handle('llm:checkup:discard', () => {
+    if (!active) return { ok: false, error: 'no session' };
+    if (!active.checkup) return { ok: false, error: 'no checkup block on this session' };
+    delete active.checkup;
+    persist();
+    sendTranscript();
+    return { ok: true, session: publicSession() };
+  });
+
+  // -------- vocabulary profiles (userData/vocabulary.json) --------
+  ipcMain.handle('llm:vocab:list', () => vocabulary.load());
+  ipcMain.handle('llm:vocab:save', (_e, data) => {
+    try { return vocabulary.save(data); }
+    catch (err) { return { ok: false, error: String(err.message || err) }; }
+  });
+  ipcMain.handle('llm:vocab:reveal', () => {
+    try { vocabulary.revealFile(); return { ok: true }; }
+    catch (err) { return { ok: false, error: String(err.message || err) }; }
+  });
+
   ipcMain.handle('shell:reveal', (_e, p) => { if (p) shell.showItemInFolder(p); return { ok: true }; });
   ipcMain.handle('shell:copy', (_e, t) => { clipboard.writeText(String(t ?? '')); return { ok: true }; });
 }
@@ -623,6 +743,7 @@ function registerIpc() {
 // --------------------------------------------------------------------------- bootstrap
 app.whenReady().then(() => {
   settings = createSettings(app.getPath('userData'));
+  vocabulary = createVocabulary(app.getPath('userData'));
   engine = new Engine({ binDir: BIN_DIR, modelDir: MODEL_DIR });
   const parakeet = new ParakeetEngine({
     repoRoot: REPO_ROOT,
@@ -773,6 +894,174 @@ async function runSmoke() {
       }
     } catch { /* non-fatal */ }
 
+    // 2.7) v1.6.0 engine-first settings: #setEngine renders above #modelList, and the
+    // model list is scoped to the engine (parakeet = exactly one row, nothing ggml).
+    const engineCheck = await win.webContents.executeJavaScript(`(async () => {
+      const eng = document.getElementById('setEngine');
+      const ml = document.getElementById('modelList');
+      if (!eng || !ml) return JSON.stringify({ fail: 'engine/model controls missing' });
+      // boot wiring is async: poll until the model list has rendered at least once
+      for (let i = 0; i < 50 && !ml.children.length; i++) await new Promise((r) => setTimeout(r, 100));
+      const out = { startEngine: eng.value || 'whisper' };
+      out.engineAboveModels = !!(eng.compareDocumentPosition(ml) & Node.DOCUMENT_POSITION_FOLLOWING);
+      const pk = window.susurro ? (await window.susurro.engine.status())?.engines?.parakeet : null;
+      // whisper first: the full catalog renders
+      eng.value = 'whisper'; eng.dispatchEvent(new Event('change'));
+      for (let i = 0; i < 50 && document.querySelectorAll('#modelList .model-row').length < 2; i++) await new Promise((r) => setTimeout(r, 100));
+      out.whisperRows = document.querySelectorAll('#modelList .model-row').length;
+      // parakeet scoping only when the engine is actually provisioned in THIS mode
+      // (dev smoke looks in repo native/, packaged in userData — SKIP otherwise,
+      // mirroring tools/test-parakeet-engine.js SKIP semantics)
+      if (!pk || !pk.available) {
+        out.parakeetSkipped = pk?.reason || 'parakeet not provisioned';
+      } else {
+        eng.value = 'parakeet'; eng.dispatchEvent(new Event('change'));
+        for (let i = 0; i < 50 && document.querySelectorAll('#modelList .model-row').length !== 1; i++) await new Promise((r) => setTimeout(r, 100));
+        const rows = [...document.querySelectorAll('#modelList .model-row')];
+        out.parakeetRows = rows.length;
+        out.parakeetIds = rows.map((r) => r.dataset.id || '').join(',');
+        out.noGgml = rows.every((r) => !/ggml/i.test(r.dataset.id || ''));
+        // restore the engine the user had before this stage
+        eng.value = out.startEngine; eng.dispatchEvent(new Event('change'));
+        await new Promise((r) => setTimeout(r, 400));
+      }
+      return JSON.stringify(out);
+    })()`);
+    console.log('[smoke] engine order :', engineCheck);
+    try {
+      const ec = JSON.parse(engineCheck);
+      const scopedOk = ec.parakeetSkipped != null || (ec.parakeetRows === 1 && ec.noGgml);
+      if (ec.fail || !ec.engineAboveModels || ec.whisperRows < 2 || !scopedOk) {
+        console.error(`[smoke] FAILED: engine-first settings wrong: ${engineCheck}`);
+        process.exitCode = 1;
+      }
+    } catch { /* non-fatal */ }
+
+    // 2.8) v1.6.0 AI checkup button gating. Hidden while the feature is disabled (default);
+    // visible only when enabled + configured AND a finished, diarization-resolved session is
+    // open AND the pipeline is idle; hidden again while a recording status is forced.
+    const btnHidden0 = await win.webContents.executeJavaScript(
+      'document.getElementById("btnAiCheckup")?.classList.contains("hidden")');
+    console.log('[smoke] checkup hidden (feature disabled):', btnHidden0);
+    if (btnHidden0 !== true) {
+      console.error('[smoke] FAILED: AI checkup button visible while the feature is disabled');
+      process.exitCode = 1;
+    }
+
+    // fixture: a finished, diarized session. No audio file is needed — the gate never plays it.
+    const fxParent = path.join(app.getPath('temp'), 'susurro-smoke-checkup');
+    try { fs.rmSync(fxParent, { recursive: true, force: true }); } catch { /* fresh dir */ }
+    fs.mkdirSync(fxParent, { recursive: true });
+    const fx = store.createSession({
+      parentDir: fxParent, name: 'smoke-checkup',
+      settings: { model: 'small.en' }, gpu: null,
+      model: { name: 'small.en', engine: 'whisper' }, chunkSec: 12, sources: [],
+    });
+    fx.recording.startedAt = new Date().toISOString();
+    fx.recording.stoppedAt = new Date().toISOString();
+    fx.recording.durationSec = 24;
+    const mkWords = (n) => Array.from({ length: n }, (_, i) => ({ t: i * 0.4, d: 0.3, w: `word${i}` }));
+    fx.chunks = [0, 1].map((k) => ({
+      index: k, offsetSec: k * 12, durationSec: 12,
+      audioFile: `audio/chunk_000${k}.wav`, status: 'done', engine: 'demo',
+      words: mkWords(30),
+    }));
+    fx.diarization = {
+      version: 1, engine: 'demo', model: 'placeholder',
+      createdAt: new Date().toISOString(), audioSec: 24, speakers: 1,
+      turns: [{ start: 0, end: 24, speaker: 'spk0' }],
+    };
+    store.writeSession(fx.folder, fx);
+
+    // configure through the real settings store, then reload so the renderer's boot-time
+    // settings fetch (S.settings) sees the fixture parent + the checkup config.
+    const prevSettings = {
+      llmCheckup: settings.get('llmCheckup'),
+      llmEndpoint: settings.get('llmEndpoint'),
+      llmApiKey: settings.get('llmApiKey'),
+      llmModel: settings.get('llmModel'),
+      lastSessionParent: settings.get('lastSessionParent'),
+    };
+    settings.set({
+      llmCheckup: true,
+      llmEndpoint: 'http://127.0.0.1:9/v1',
+      llmModel: 'smoke-stub',
+      llmApiKey: '',
+      lastSessionParent: fxParent,
+    });
+    win.webContents.reload();
+    await new Promise((r) => win.webContents.once('did-finish-load', r));
+    await new Promise((r) => setTimeout(r, 1200));   // renderer boot wiring
+
+    const gateCheck = await win.webContents.executeJavaScript(`(async () => {
+      const poll = async (fn, ms = 6000) => {
+        const t0 = Date.now();
+        for (;;) { const v = await fn(); if (v) return v; if (Date.now() - t0 > ms) return null; await new Promise((r) => setTimeout(r, 150)); }
+      };
+      const btn = document.getElementById('btnAiCheckup');
+      if (!btn) return JSON.stringify({ fail: 'no btnAiCheckup' });
+      const out = {};
+      out.hiddenWithNoSession = btn.classList.contains('hidden');
+      document.getElementById('btnSessions')?.click();
+      const item = await poll(async () => {
+        const its = [...document.querySelectorAll('.sess-item')];
+        return its.find((x) => /smoke-checkup/.test(x.textContent)) || null;
+      });
+      if (!item) return JSON.stringify({ fail: 'fixture session not listed' });
+      item.click();
+      const shown = await poll(() => !btn.classList.contains('hidden') || null);
+      out.visibleWhenConfiguredAndResolved = !!shown;
+      out.diarizeBtnShown = !document.getElementById('btnDiarize')?.classList.contains('hidden');
+      return JSON.stringify(out);
+    })()`);
+    console.log('[smoke] checkup gate    :', gateCheck);
+    try {
+      const gc = JSON.parse(gateCheck);
+      if (gc.fail || !gc.hiddenWithNoSession || !gc.visibleWhenConfiguredAndResolved) {
+        console.error(`[smoke] FAILED: AI checkup gating wrong: ${gateCheck}`);
+        process.exitCode = 1;
+      }
+    } catch { /* non-fatal */ }
+
+    // force a fake recording status through the real event path — the button must hide.
+    send('recordState', { recording: true, paused: false });
+    await new Promise((r) => setTimeout(r, 300));
+    const hiddenWhileRecording = await win.webContents.executeJavaScript(
+      'document.getElementById("btnAiCheckup").classList.contains("hidden")');
+    console.log('[smoke] checkup hidden (recording)      :', hiddenWhileRecording);
+    if (hiddenWhileRecording !== true) {
+      console.error('[smoke] FAILED: AI checkup button visible while recording');
+      process.exitCode = 1;
+    }
+    send('recordState', { recording: false, paused: false });
+    await new Promise((r) => setTimeout(r, 300));
+
+    // restore the user's settings and leave the gate in its default (hidden) state.
+    // The renderer's S.settings is only refreshed through its own input handlers, so
+    // restore THROUGH the real inputs (their change handlers persist + re-render);
+    // main-side settings.set alone leaves S.settings stale (the button stayed visible).
+    await win.webContents.executeJavaScript(`(async () => {
+      const flip = (id, value) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        if (el.type === 'checkbox') { el.checked = value; } else { el.value = value; }
+        el.dispatchEvent(new Event('change'));
+      };
+      flip('setLlmCheckup', false);
+      flip('setLlmEndpoint', '');
+      flip('setLlmModel', '');
+    })()`);
+    settings.set({ llmApiKey: prevSettings.llmApiKey, lastSessionParent: prevSettings.lastSessionParent });
+    send('recordState', { recording: false, paused: false });
+    await new Promise((r) => setTimeout(r, 300));
+    const hiddenRestored = await win.webContents.executeJavaScript(
+      'document.getElementById("btnAiCheckup").classList.contains("hidden")');
+    console.log('[smoke] checkup hidden (restored off)   :', hiddenRestored);
+    if (hiddenRestored !== true) {
+      console.error('[smoke] FAILED: AI checkup button still visible after settings restore');
+      process.exitCode = 1;
+    }
+
     // 3) back to the main view, then shrink the window so the transcript definitely
     //    overflows - otherwise there is no scrollbar on screen to inspect.
     await win.webContents.executeJavaScript("document.getElementById('btnCloseSettings').click()");
@@ -837,7 +1126,10 @@ async function runSmoke() {
 
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 // A diarize run can take minutes; never leave the sidecar running after the app is gone.
-app.on('will-quit', () => { try { diarizeRun?.child?.kill(); } catch { /* already gone */ } });
+app.on('will-quit', () => {
+  try { diarizeRun?.child?.kill(); } catch { /* already gone */ }
+  try { checkupRun?.ctrl?.abort(); } catch { /* already gone */ }
+});
 
 /**
  * Headless import E2E: drive the renderer's real bridge through api.import.run, wait for

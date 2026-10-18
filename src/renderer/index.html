@@ -77,6 +77,12 @@
           <h2>Transcript</h2>
           <div class="panel-actions">
             <button id="btnDiarize" class="btn btn-sm hidden" title="Identify who spoke when">◐ Identify speakers</button>
+            <span id="ckSeg" class="seg hidden">
+              <button id="ckViewChecked" class="btn btn-sm" title="Show the checked-up transcript">Checked</button>
+              <button id="ckViewOriginal" class="btn btn-sm" title="Show the original transcript">Original</button>
+            </span>
+            <button id="btnAiCheckup" class="btn btn-sm llm-checkup hidden" title="Run the AI transcript checkup">✦ AI checkup</button>
+            <button id="btnCkDiscard" class="btn btn-sm hidden" title="Remove all AI corrections from this session">Discard corrections</button>
             <button id="btnFollow" class="btn btn-sm hidden">⤓ follow</button>
             <button id="btnPlay" class="btn btn-sm" disabled>▶ Play</button>
             <button id="btnStopPlay" class="btn btn-sm" disabled>■</button>
@@ -131,17 +137,18 @@
         <div class="field-label">Theme</div>
         <div id="themeList"></div>
       </div>
-      <div class="field-block">
-        <div class="field-label">Model</div>
-        <div id="modelList" class="model-list"></div>
-      </div>
       <label class="field wide">
         <span>Engine</span>
         <select id="setEngine">
           <option value="whisper">whisper.cpp</option>
           <option value="parakeet">parakeet — fast, 25 languages</option>
         </select>
+        <span class="hint">models below are filtered to the selected engine</span>
       </label>
+      <div class="field-block">
+        <div class="field-label">Model</div>
+        <div id="modelList" class="model-list"></div>
+      </div>
       <label class="field wide">
         <span>Language</span>
         <select id="setLang">
@@ -172,6 +179,51 @@
       <label class="row-check">
         <input type="checkbox" id="setDiarAuto" /> <span>Identify speakers automatically after transcription</span>
       </label>
+
+      <div class="field-block" id="llmCheckupBlock">
+        <div class="field-label">AI transcript checkup</div>
+        <label class="row-check">
+          <input type="checkbox" id="setLlmCheckup" /> <span>Enable the AI checkup feature</span>
+        </label>
+        <label class="field wide">
+          <span>Endpoint (OpenAI-style /v1 base)</span>
+          <input id="setLlmEndpoint" placeholder="http://127.0.0.1:1234/v1" spellcheck="false" />
+        </label>
+        <label class="field wide">
+          <span>API key (empty = endpoint needs none)</span>
+          <input id="setLlmApiKey" type="password" autocomplete="off" spellcheck="false" />
+        </label>
+        <label class="field wide">
+          <span>Model</span>
+          <input id="setLlmModel" list="llmModelOptions" spellcheck="false" placeholder="model id at the endpoint" />
+        </label>
+        <datalist id="llmModelOptions"></datalist>
+        <div class="llm-row">
+          <label class="field">
+            <span>Context tokens</span>
+            <input id="setLlmContext" type="number" min="1024" step="256" />
+          </label>
+          <button id="btnLlmProbe" class="btn btn-sm">List models</button>
+        </div>
+        <label class="field wide">
+          <span>Thinking mode</span>
+          <select id="setLlmThinking">
+            <option value="auto">auto — strip think blocks</option>
+            <option value="off">off — take content as-is</option>
+          </select>
+        </label>
+        <div class="field-block" id="llmVocabBlock">
+          <div class="field-label">Vocabulary</div>
+          <div id="vocabProfiles"></div>
+          <div class="llm-row">
+            <input id="vocabNewName" placeholder="new profile name" spellcheck="false" />
+            <button id="btnVocabAdd" class="btn btn-sm">add profile</button>
+            <button id="btnVocabReveal" class="btn btn-sm" title="Open vocabulary.json in the file manager">Show file…</button>
+          </div>
+          <textarea id="vocabTerms" rows="5" spellcheck="false" placeholder="one term per line — injected into the checkup prompt"></textarea>
+        </div>
+        <div class="hint">Runs only when you click the checkup button; sends the transcript to the endpoint above. Nothing is sent automatically.</div>
+      </div>
 
       <div class="field-block" id="aboutBlock">
         <div class="field-label">About</div>

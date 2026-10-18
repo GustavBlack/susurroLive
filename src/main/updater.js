@@ -64,7 +64,10 @@ function createUpdaterState() {
  */
 function initUpdater({ send, userDataDir }) {
   const state = createUpdaterState();
-  const push = () => send('updateStatus', { ...state, info: state.info ? { ...state.info } : null });
+  // NOTE: state carries check/download/install FUNCTIONS (test/API surface) — functions
+  // fail structured-clone, so the pushed payload must strip them or every updateStatus
+  // send is silently dropped (renderer pill never updates on installed builds).
+  const push = () => send('updateStatus', { ...state, check: undefined, download: undefined, install: undefined, info: state.info ? { ...state.info } : null });
 
   if (!state.feedConfigured) return state;
 

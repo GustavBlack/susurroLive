@@ -10,6 +10,24 @@
 const fs = require('fs');
 const path = require('path');
 const { isValidBlock, assignSpeakers, speakerNumber } = require('./diarize-join');
+const { applyCheckup } = require('./llm/checkup');
+
+/**
+ * THE word list every export reads. When a checkup block exists, the words route through
+ * the same projection the UI uses (applyCheckup respects checkup.active and the chunk
+ * drift guard), so an export mirrors exactly what the user sees. Without a block this is
+ * the stored array untouched — sessions without a checkup export byte-identical to before.
+ */
+function projectedWords(session) {
+  const words = session.transcript?.words || [];
+  if (!session.checkup) return words;
+  return applyCheckup(words, session.checkup).words;
+}
+
+/** True when the corrected projection actually differs from the stored prose. */
+function checkupActive(session) {
+  return !!session.checkup && session.checkup.active !== false && (session.checkup.applied || 0) > 0;
+}
 
 /** Same spacing rules as transcript.fullText (assemble.js). */
 function joinWords(words) {
@@ -37,7 +55,7 @@ function speakerParagraphs(words, speakers) {
 /** {block, speakers} when the session is diarized and has words, else null. */
 function diarized(session) {
   const block = session.diarization;
-  const words = session.transcript?.words || [];
+  const words = projectedWords(session);
   if (!isValidBlock(block) || !words.length) return null;
   return { block, speakers: assignSpeakers(words, block.turns) };
 }
@@ -59,6 +77,7 @@ function written(p) {
 
 function exportTxt(session, outPath) {
   const d = diarized(session);
+  const words = projectedWords(session);
   const head = [
     session.name,
     `Recorded: ${session.recording?.startedAt || 'n/a'}`,
@@ -69,14 +88,15 @@ function exportTxt(session, outPath) {
     '',
   ].join('\n');
   const body = d
-    ? speakerParagraphs(session.transcript.words, d.speakers).join('\n\n')
-    : session.transcript?.fullText || '(no transcript yet)';
+    ? speakerParagraphs(words, d.speakers).join('\n\n')
+    : (checkupActive(session) ? joinWords(words) : session.transcript?.fullText || '(no transcript yet)');
   fs.writeFileSync(outPath, `${head}${body}\n`, 'utf8');
   return written(outPath);
 }
 
 function exportJson(session, outPath) {
   const d = diarized(session);
+  const words = projectedWords(session);
   const doc = {
     session: {
       id: session.id,
@@ -88,8 +108,8 @@ function exportJson(session, outPath) {
     sources: session.recording?.sources ?? [],
     transcript: {
       language: session.transcript?.language ?? null,
-      fullText: session.transcript?.fullText ?? '',
-      words: session.transcript?.words ?? [],
+      fullText: checkupActive(session) ? joinWords(words) : (session.transcript?.fullText ?? ''),
+      words,
       segments: session.transcript?.segments ?? [],
     },
     chunks: (session.chunks || []).map((c) => ({
@@ -125,4 +145,4 @@ function exportAudio(session, outPath, { concatWavs } = {}) {
   throw new Error('no concatenated audio available');
 }
 
-module.exports = { exportTxt, exportJson, exportAudio, fmtTime };
+module.exports = { exportTxt, exportJson, exportAudio, fmtTime, projectedWords, checkupActive };

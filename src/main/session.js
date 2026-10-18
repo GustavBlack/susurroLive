@@ -12,7 +12,7 @@ const { isValidBlock } = require('./diarize-join');
 
 // Bump only for BREAKING shape changes (and add a migration). Optional additive blocks such
 // as `diarization` keep v1: older builds preserve unknown keys when they re-save.
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 const APP_VERSION = require('../../package.json').version;
 
 function slug(s) {
@@ -63,6 +63,14 @@ function validate(raw) {
   if (raw.diarization != null && !isValidBlock(raw.diarization)) {
     console.warn('[session] dropping malformed diarization block');
     delete raw.diarization;
+  }
+
+  // The optional AI checkup block (LLM corrections, applied at read time only). A
+  // non-object is dropped rather than refusing to open the session; unknown keys inside
+  // the block are tolerated for forward-compat.
+  if (raw.checkup != null && (typeof raw.checkup !== 'object' || Array.isArray(raw.checkup))) {
+    console.warn('[session] dropping malformed checkup block');
+    delete raw.checkup;
   }
 
   // Crash recovery: anything mid-flight goes back to the queue.

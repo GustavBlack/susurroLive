@@ -7,6 +7,7 @@ const EVENTS = [
   'chunk', 'chunkDone', 'chunks', 'pipeline', 'transcript',
   'recordState', 'status', 'log', 'import',
   'diarizeProgress', 'diarizeDone', 'diarizeError',
+  'llmCheckupProgress', 'llmCheckupDone', 'llmCheckupError',
   'parakeetProgress', 'parakeetDone', 'parakeetError',
   'updateStatus',
 ];
@@ -82,6 +83,22 @@ contextBridge.exposeInMainWorld('susurro', {
     status: () => ipcRenderer.invoke('diarize:status'),
   },
 
+  // ---- AI transcript checkup + vocabulary ----
+  llm: {
+    probe: () => ipcRenderer.invoke('llm:probe'),
+    checkup: {
+      run: () => ipcRenderer.invoke('llm:checkup:run'),
+      toggle: (active) => ipcRenderer.invoke('llm:checkup:toggle', active),
+      discard: () => ipcRenderer.invoke('llm:checkup:discard'),
+      cancel: () => ipcRenderer.invoke('llm:checkup:cancel'),
+    },
+    vocab: {
+      list: () => ipcRenderer.invoke('llm:vocab:list'),
+      save: (data) => ipcRenderer.invoke('llm:vocab:save', data),
+      reveal: () => ipcRenderer.invoke('llm:vocab:reveal'),
+    },
+  },
+
   // ---- models ----
   models: {
     catalog: () => ipcRenderer.invoke('models:catalog'),
@@ -121,4 +138,19 @@ contextBridge.exposeInMainWorld('susurro', {
       if (i >= 0) arr.splice(i, 1);
     };
   },
+
+  // dedicated checkup subscriptions, mirroring the diarize trio's on-style shape
+  onLLMCheckupProgress: (cb) => on('llmCheckupProgress', cb),
+  onLLMCheckupDone: (cb) => on('llmCheckupDone', cb),
+  onLLMCheckupError: (cb) => on('llmCheckupError', cb),
 });
+
+function on(evt, cb) {
+  if (!listeners.has(evt)) listeners.set(evt, []);
+  listeners.get(evt).push(cb);
+  return () => {
+    const arr = listeners.get(evt) || [];
+    const i = arr.indexOf(cb);
+    if (i >= 0) arr.splice(i, 1);
+  };
+}

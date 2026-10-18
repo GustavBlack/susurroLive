@@ -38,6 +38,14 @@ const S = {
   diarManual: false,    // the user clicked the button: toasts come from the click handler
   diarStartedAt: null,  // elapsed-time readout while running
   diarTimer: null,
+  diarFailed: false,    // last diarize attempt for this session failed (checkup gating)
+  checkupRunning: false,
+  checkupProgress: null,
+  driftedChunkIds: [],  // chunks whose re-transcribed output no longer matches checkup.chunkHashes
+  driftToastShown: false,
+  ckEditMap: null,      // word index -> { orig, w } while the Checked view is live
+  vocab: null,          // vocabulary.json projection: { profiles: [...] }
+  vocabSel: null,       // id of the profile bound to the textarea
   playing: false,
   mics: [],
   seq: 1,
@@ -406,6 +414,11 @@ function renderTranscript() {
       sp.dataset.t = String(w.t);
       sp.dataset.w = w.w;
       if (spk !== null) { sp.dataset.spk = String(spk); S.lastSpk = spk; }
+      // checkup presentation-only marks: corrected words in the Checked view, and words of
+      // chunks re-transcribed after the checkup ran (their edits were dropped).
+      const edit = S.ckEditMap?.get(i);
+      if (edit) { sp.classList.add('ck-fixed'); sp.title = `was “${edit.orig}”`; }
+      if (w.chunk != null && S.driftedChunkIds.includes(w.chunk)) sp.classList.add('ck-drifted');
       sp.onclick = () => { const p = $('player'); if (p.duration) p.currentTime = w.t; };
       S.wordSpans.push(sp);
       frag.appendChild(sp);
@@ -534,18 +547,45 @@ const sameFolder = (a, b) => !!a && !!b &&
  * Take new words + speakers. `diarization` is the block's identity ({speakers, createdAt});
  * a different block forces a full re-render so chips and time marks lay out together.
  */
-function setTranscriptData({ words, segments, wordSpeakers, diarization }) {
-  S.words = words || [];
+/**
+ * A session:current / transcript payload may arrive as a plain word array or as
+ * { words, driftedChunkIds } (checkup projection shape). Tolerate both everywhere.
+ */
+function asWordList(t) {
+  if (Array.isArray(t)) return t;
+  if (t && Array.isArray(t.words)) return t.words;
+  return [];
+}
+
+function setTranscriptData({ words, segments, wordSpeakers, diarization, driftedChunkIds }) {
+  S.words = asWordList(words);
   S.segments = segments || [];
   S.wordSpeakers = wordSpeakers || [];
+  if (driftedChunkIds) S.driftedChunkIds = driftedChunkIds;
   S.diarSpeakers = diarization?.speakers || 0;
   const at = diarization?.createdAt || null;
   if (at !== S.diarizedAt) {
     S.diarizedAt = at;
     resetTranscript();
   }
+  buildCheckupEditMap();
   renderTranscript();
   renderSpeakers();
+}
+
+/** word index -> { orig, w } for presentation-only highlighting in the Checked view. */
+function buildCheckupEditMap() {
+  const ck = S.session?.checkup;
+  const edits = (ck && ck.active === true && Array.isArray(ck.edits)) ? ck.edits : null;
+  S.ckEditMap = null;
+  if (!edits) return;
+  const map = new Map();
+  for (const e of edits) {
+    if (e && Number.isInteger(e.i) && e.i >= 0 && typeof e.w === 'string') {
+      map.set(e.i, { orig: e.orig, w: e.w });
+    }
+  }
+  S.ckEditMap = map;
 }
 
 function renderSpeakers() {
@@ -585,6 +625,7 @@ function renderSpeakers() {
     S.diarTimer = null;
     S.diarStartedAt = null;
   }
+  renderCheckupUI();   // shares this recompute point: pipeline idle + diarize events
 }
 
 async function refreshDiarStatus() {
@@ -605,17 +646,241 @@ async function runDiarize() {
   S.diarManual = false;
   S.diarizing = false;
   if (r.cancelled) showToast('speaker identification cancelled');
-  else if (!r.ok) showToast(`speaker identification failed: ${r.error}`);
+  else if (!r.ok) { S.diarFailed = !sameFolder(r.folder, S.session?.folder) ? S.diarFailed : true; showToast(`speaker identification failed: ${r.error}`); }
   else if (sameFolder(r.folder, S.session?.folder)) {
+    S.diarFailed = false;
     showToast(`${r.speakers} speaker${r.speakers === 1 ? '' : 's'} identified`);
   }
   renderSpeakers();
 }
 
+// ---------------------------------------------------------------- AI transcript checkup
+// Non-destructive: main owns the checkup block + projection; this is UI only. Every bridge
+// call is defensive (api.llm may be absent in older main builds — the feature just stays off).
+
+function pipelineIdle() {
+  if (S.recording || S.importing) return false;
+  return !(S.chunks || []).some((c) => c.status !== 'done' && c.status !== 'error');
+}
+
+/** Diarization attempt for the open session has settled: done, failed, or unavailable. */
+function diarizationResolved() {
+  if (!S.session || S.diarizing || S.diar?.running) return false;
+  if (S.session.diarization) return true;
+  if (S.diar && S.diar.available === false) return true;
+  return S.diarFailed === true;
+}
+
+/** Visibility + labels for the checkup button, Checked|Original toggle and discard action. */
+function renderCheckupUI() {
+  const btn = $('btnAiCheckup');
+  if (!btn) return;
+  const st = S.settings || {};
+  const configured = st.llmCheckup === true && !!st.llmEndpoint && !!st.llmModel;
+  const show = configured && !!S.session && S.words.length > 0
+    && pipelineIdle() && diarizationResolved() && !S.checkupRunning;
+  btn.classList.toggle('hidden', !show);
+  btn.classList.toggle('busy', S.checkupRunning);
+  btn.textContent = S.checkupRunning
+    ? `Checking…${S.checkupProgress ? ` ${S.checkupProgress.done}/${S.checkupProgress.total}` : ''}  ✕`
+    : '✦ AI checkup';
+  btn.title = S.checkupRunning
+    ? 'Checking the transcript — click to cancel'
+    : 'Send the transcript to your AI endpoint for a correction pass';
+
+  const ck = S.session?.checkup;
+  const hasCk = !!(ck && Array.isArray(ck.edits) && ck.edits.length);
+  $('ckSeg').classList.toggle('hidden', !hasCk);
+  if (hasCk) {
+    const checked = ck.active === true;
+    $('ckViewChecked').classList.toggle('on', checked);
+    $('ckViewOriginal').classList.toggle('on', !checked);
+  }
+  $('btnCkDiscard').classList.toggle('hidden', !hasCk);
+
+  // one-time hint when drifted chunks appear (re-transcribed after the checkup ran)
+  if (S.driftedChunkIds.length && !S.driftToastShown) {
+    S.driftToastShown = true;
+    showToast('chunk re-transcribed since checkup — run the checkup again to refresh corrections');
+  }
+}
+
+let ckUnsubs = [];
+function ckFinish() {
+  S.checkupRunning = false;
+  S.checkupProgress = null;
+  for (const off of ckUnsubs) { try { off(); } catch { /* already gone */ } }
+  ckUnsubs = [];
+  renderSpeakers();
+}
+
+async function runAiCheckup() {
+  if (!api.llm?.checkup?.run) { showToast('AI checkup is not available in this build'); return; }
+  if (S.checkupRunning) {           // second click while running = cancel
+    try { await api.llm.checkup.cancel?.(); } catch { /* older builds: ignore */ }
+    return;
+  }
+  S.checkupRunning = true;
+  S.checkupProgress = null;
+  renderSpeakers();
+  ckUnsubs = [
+    api.onLLMCheckupProgress?.((p) => { S.checkupProgress = p || null; renderSpeakers(); }),
+    api.onLLMCheckupDone?.((p) => {
+      ckFinish();
+      showToast(`checkup applied ${p?.applied ?? 0} corrections`);
+      refreshSession();             // re-pulls the projection; karaoke re-hydrates
+    }),
+    api.onLLMCheckupError?.((p) => {
+      ckFinish();
+      showToast(`checkup failed: ${p?.message || 'unknown error'}`);
+    }),
+  ].filter(Boolean);
+  try { await api.llm.checkup.run(); }
+  catch (err) { ckFinish(); showToast(`checkup failed: ${err?.message || err}`); }
+}
+
+async function setCheckupView(active) {
+  const ck = S.session?.checkup;
+  if (!ck || ck.active === active) return;
+  if (api.llm?.checkup?.toggle) {
+    await api.llm.checkup.toggle(active).catch(() => {});
+    await refreshSession();         // main re-sends the projection for the new view
+    return;
+  }
+  // Defensive fallback (bridge absent): apply/revert edits locally, presentation only.
+  ck.active = active;
+  for (const e of ck.edits || []) {
+    const w = S.words[e.i];
+    if (!w) continue;
+    if (active && w.w === e.orig) w.w = e.w;
+    else if (!active && w.w === e.w) w.w = e.orig;
+  }
+  buildCheckupEditMap();
+  resetTranscript();
+  renderTranscript();
+  renderSpeakers();
+}
+
+async function discardCheckup() {
+  if (api.llm?.checkup?.discard) {
+    const r = await api.llm.checkup.discard().catch((e) => ({ ok: false, error: e?.message || String(e) }));
+    if (r && r.ok === false) { showToast(`discard failed: ${r.error}`); return; }
+  } else if (S.session?.checkup) {
+    delete S.session.checkup;
+  }
+  S.driftedChunkIds = [];
+  S.driftToastShown = false;
+  await refreshSession();
+  showToast('checkup corrections discarded');
+}
+
+// ---------------------------------------------------------------- vocabulary (settings drawer)
+function vocabProfiles() { return S.vocab?.profiles || []; }
+
+async function refreshVocab() {
+  if (api.llm?.vocab?.list) {
+    try {
+      const r = await api.llm.vocab.list();
+      if (r?.ok) S.vocab = r.data || r;   // tolerate {ok,data} or the raw file shape
+    } catch { /* keep whatever we had */ }
+  }
+  renderVocab();
+}
+
+async function saveVocab(mut) {
+  if (!api.llm?.vocab?.save || !S.vocab) { showToast('vocabulary is not available in this build'); return; }
+  mut(S.vocab);
+  const r = await api.llm.vocab.save(S.vocab).catch((e) => ({ ok: false, error: e?.message || String(e) }));
+  if (r && r.ok === false) { showToast(`vocab save failed: ${r.error}`); return; }
+  await refreshVocab();
+}
+
+function renderVocab() {
+  const box = $('vocabProfiles');
+  if (!box) return;
+  box.innerHTML = '';
+  const profs = vocabProfiles();
+  if (!S.vocab) box.appendChild(el('div', 'empty', 'vocabulary.json unavailable in this build.'));
+  else if (!profs.length) box.appendChild(el('div', 'empty', 'No profiles yet — add one below.'));
+  if (!S.vocabSel && profs.length) S.vocabSel = profs[0].id;
+  for (const p of profs) {
+    const row = el('div', 'vocab-row' + (p.id === S.vocabSel ? ' sel' : ''));
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = p.active === true;
+    cb.title = 'include this profile in the checkup prompt';
+    cb.onchange = () => saveVocab((v) => {
+      const q = v.profiles.find((x) => x.id === p.id);
+      if (q) q.active = cb.checked;
+    });
+    row.appendChild(cb);
+    const name = el('span', 'vocab-name', p.name || p.id);
+    name.title = 'select this profile for editing';
+    name.onclick = () => { S.vocabSel = p.id; renderVocab(); };
+    row.appendChild(name);
+    row.appendChild(el('span', 'vocab-count', `${(p.terms || []).length} terms`));
+    box.appendChild(row);
+  }
+  const sel = profs.find((p) => p.id === S.vocabSel);
+  const ta = $('vocabTerms');
+  ta.value = sel ? (sel.terms || []).join('\n') : '';
+  ta.disabled = !sel;
+}
+
+// ---------------------------------------------------------------- llm settings inputs
+function llmTextSetter(key, { numeric = false } = {}) {
+  return async () => {
+    const id = { llmEndpoint: 'setLlmEndpoint', llmApiKey: 'setLlmApiKey', llmModel: 'setLlmModel', llmContextTokens: 'setLlmContext' }[key];
+    let v = $(id).value.trim();
+    if (numeric) {
+      const n = parseInt(v, 10);
+      v = Number.isFinite(n) && n >= 1024 ? n : 8192;
+      $(id).value = String(v);
+    }
+    S.settings = await api.settings.set({ [key]: v });
+    renderSpeakers();
+  };
+}
+
+async function probeLlm() {
+  if (!api.llm?.probe) { showToast('AI checkup is not available in this build'); return; }
+  const btn = $('btnLlmProbe');
+  btn.disabled = true;
+  btn.textContent = 'Probing…';
+  try {
+    const r = await api.llm.probe();
+    if (!r?.ok) { showToast(`probe failed: ${r?.error || 'unknown error'}`); return; }
+    const dl = $('llmModelOptions');
+    dl.innerHTML = '';
+    const models = (r.models || []).filter((m) => m?.id);
+    for (const m of models) {
+      const o = document.createElement('option');
+      o.value = m.id;
+      dl.appendChild(o);
+    }
+    if (Number.isFinite(r.contextTokens) && r.contextTokens > 0) {
+      $('setLlmContext').value = String(r.contextTokens);
+      S.settings = await api.settings.set({ llmContextTokens: r.contextTokens });
+      showToast(`${models.length} model${models.length === 1 ? '' : 's'} found · context ${r.contextTokens} tokens`);
+    } else {
+      showToast(`${models.length} model${models.length === 1 ? '' : 's'} found`);
+    }
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'List models';
+  }
+}
+
 // ---------------------------------------------------------------- session
 async function refreshSession() {
+  const prevFolder = S.session?.folder;
   S.session = await api.session.current();
   if (!S.session) return;
+  if (S.session.folder !== prevFolder) {
+    S.diarFailed = false;
+    S.driftedChunkIds = [];
+    S.driftToastShown = false;
+  }
   $('sessionName').value = S.session.name || 'Untitled Session';
   $('folderPath').textContent = S.session.folder || '';
   $('folderPath').title = S.session.folder || '';
@@ -627,10 +892,14 @@ async function refreshSession() {
   if (S.session.transcript) {
     resetTranscript();
     setTranscriptData({
-      words: S.session.transcript.words,
+      // tolerate a plain array or the { words, driftedChunkIds } projection shape
+      words: asWordList(S.session.transcript.words ?? S.session.transcript),
       segments: S.session.transcript.segments,
       wordSpeakers: S.session.wordSpeakers,
       diarization: S.session.diarization,
+      driftedChunkIds: S.session.transcript.driftedChunkIds
+        || S.session.checkup?.driftedChunkIds
+        || S.driftedChunkIds,
     });
   }
   await refreshDiarStatus();
@@ -751,6 +1020,7 @@ function renderTheme() {
 function openSettings() {
   $('settingsDrawer').classList.remove('hidden');
   renderDiag();
+  refreshVocab();   // re-read on every drawer open: the file is user-owned
 }
 
 function renderDiag() {
@@ -791,10 +1061,48 @@ async function refreshEngine() {
   await renderModels();
 }
 
-/** Model manager: installed / downloadable / downloading, with progress. */
+/** Model manager: installed / downloadable / downloading, with progress — scoped to the engine. */
 async function renderModels() {
   const box = $('modelList');
   if (!box) return;
+  const engineId = S.settings?.engine || 'whisper';
+
+  // parakeet: a single synthetic row. settings.model stays untouched and irrelevant here.
+  if (engineId === 'parakeet') {
+    const pk = S.engine?.engines?.parakeet || {};
+    const name = pk.model || 'parakeet-0.9b-int8';
+    box.innerHTML = '';
+    const row = el('div', 'model-row');
+    if (pk.available) {
+      row.classList.add('installed', 'active-model');
+      row.dataset.id = name;
+      const main = el('div', 'model-main');
+      const nameLine = el('div', 'model-name');
+      nameLine.appendChild(el('span', null, name));
+      nameLine.appendChild(el('span', 'badge active', 'in use'));
+      main.appendChild(nameLine);
+      main.appendChild(el('div', 'model-note', 'parakeet (sherpa-onnx) is the active engine — whisper models below are not used.'));
+      row.appendChild(main);
+      box.appendChild(row);
+    } else {
+      row.dataset.id = name;
+      const main = el('div', 'model-main');
+      const nameLine = el('div', 'model-name');
+      nameLine.appendChild(el('span', null, name));
+      main.appendChild(nameLine);
+      main.appendChild(el('div', 'model-note', pk.reason || 'not provisioned yet'));
+      row.appendChild(main);
+      const actions = el('div', 'model-actions');
+      const b = el('button', 'src-btn', 'Set up parakeet…');
+      b.onclick = () => downloadParakeet();
+      actions.appendChild(b);
+      row.appendChild(actions);
+      box.appendChild(row);
+    }
+    return;
+  }
+
+  // whisper: the full downloadable catalog
   let catalog = [];
   try { catalog = await api.models.catalog(); } catch { /* leave empty */ }
   S.catalog = catalog;
@@ -1185,6 +1493,44 @@ function wire() {
   };
   $('btnDiarize').onclick = runDiarize;
 
+  // AI transcript checkup
+  $('btnAiCheckup').onclick = runAiCheckup;
+  $('ckViewChecked').onclick = () => setCheckupView(true);
+  $('ckViewOriginal').onclick = () => setCheckupView(false);
+  $('btnCkDiscard').onclick = discardCheckup;
+  $('setLlmCheckup').onchange = async () => {
+    S.settings = await api.settings.set({ llmCheckup: $('setLlmCheckup').checked });
+    renderSpeakers();
+  };
+  $('setLlmEndpoint').onchange = llmTextSetter('llmEndpoint');
+  $('setLlmApiKey').onchange = llmTextSetter('llmApiKey');
+  $('setLlmModel').onchange = llmTextSetter('llmModel');
+  $('setLlmContext').onchange = llmTextSetter('llmContextTokens', { numeric: true });
+  $('setLlmThinking').onchange = async () => {
+    S.settings = await api.settings.set({ llmThinking: $('setLlmThinking').value });
+  };
+  $('btnLlmProbe').onclick = probeLlm;
+  $('vocabTerms').onblur = () => {
+    if (!S.vocab) return;
+    const terms = $('vocabTerms').value.split('\n').map((s) => s.trim()).filter(Boolean);
+    saveVocab((v) => {
+      const q = (v.profiles || []).find((x) => x.id === S.vocabSel);
+      if (q) q.terms = terms;
+    });
+  };
+  $('btnVocabAdd').onclick = () => {
+    const name = $('vocabNewName').value.trim();
+    if (!name) return;
+    $('vocabNewName').value = '';
+    saveVocab((v) => {
+      v.profiles = v.profiles || [];
+      const p = { id: `p${Date.now().toString(36)}`, name, active: false, terms: [] };
+      v.profiles.push(p);
+      S.vocabSel = p.id;
+    });
+  };
+  $('btnVocabReveal').onclick = () => { api.llm?.vocab?.reveal?.(); };
+
   // main -> renderer events
   api.on('recordState', (st) => {
     S.recording = !!st.recording;
@@ -1202,12 +1548,14 @@ function wire() {
   api.on('diarizeDone', (p) => {
     if (!sameFolder(p?.folder, S.session?.folder)) return;
     S.diarizing = false;
+    S.diarFailed = false;
     if (!S.diarManual) showToast(`${p.speakers} speaker${p.speakers === 1 ? '' : 's'} identified`);
     renderSpeakers();
   });
   api.on('diarizeError', (p) => {
     if (!sameFolder(p?.folder, S.session?.folder)) return;
     S.diarizing = false;
+    if (!p.cancelled) S.diarFailed = true;
     if (!S.diarManual) {
       showToast(p.cancelled ? 'speaker identification cancelled' : `speaker identification failed: ${p.error}`);
     }
@@ -1298,6 +1646,14 @@ async function boot() {
   }
   $('setVad').checked = S.settings.vad !== false;
   $('setDiarAuto').checked = !!S.settings.diarizeAutoOnStop;
+  // AI transcript checkup — keys may be absent in older settings.json; guard with defaults
+  $('setLlmCheckup').checked = S.settings.llmCheckup === true;
+  $('setLlmEndpoint').value = S.settings.llmEndpoint || '';
+  $('setLlmApiKey').value = S.settings.llmApiKey || '';
+  $('setLlmModel').value = S.settings.llmModel || '';
+  $('setLlmContext').value = String(S.settings.llmContextTokens || 8192);
+  $('setLlmThinking').value = S.settings.llmThinking || 'auto';
+  refreshVocab();
   // v1.5: apply the persisted theme BEFORE first paint of dependent UI, no animation.
   initTheme(S.settings.theme, S.settings.themeMode, viz);
   try { S.diar = await api.diarize.status(); } catch { S.diar = null; }
