@@ -8,7 +8,7 @@
 cloud) built for one job: capture the audio happening *around* the machine — a meeting, an interview,
 a session, a room — and hand back clean text, JSON with timecodes, and the audio itself.
 
-**v1.7.0** · Windows 10/11 x64 · BSD-3-Clause · ships as an installer **or** a single portable `.exe`
+**v1.7.1** · Windows 10/11 x64 · BSD-3-Clause · ships as an installer **or** a single portable `.exe`
 
 ---
 
@@ -159,7 +159,9 @@ a multilingual model in Settings.
 
 ## Status
 
-**v1.7.0 is built, verified, and published** — installer + portable + update feed. Verified by real
+**v1.7.1 is built, verified, and published** — installer + portable + update feed. It is the v1.7.0
+MCP release with the packaged Hermes skill renamed to `susurro-live-mcp` (see
+[`docs/v1.7.1-skill-rename.md`](docs/v1.7.1-skill-rename.md)); no app behaviour changed. Verified by real
 execution on this machine, not claims:
 
 | Check | Result |
