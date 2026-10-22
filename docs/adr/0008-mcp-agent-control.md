@@ -35,8 +35,10 @@ shell. Native Windows Hermes runs its terminal through Git Bash and has PowerShe
    `system` = loopback only, `custom` = explicit sources. `recording_start` also accepts the
    session parent folder and name, so one call creates the folder and starts capture.
 6. **Two Hermes clients.** Native `mcp_servers` config for typed `mcp_susurro_*` tools, and a
-   `susurro-live` skill + PowerShell helper that launches the app and calls the same endpoint
-   with **no MCP registration**.
+   `susurro-live-mcp` skill + PowerShell helper that launches the app and calls the same endpoint
+   with **no MCP registration**. The `-mcp` suffix is required because Hermes keys skills by
+   `name:` — a same-named `susurro-live` source-dev skill would shadow it (or be shadowed), and
+   the shadowed skill becomes unreachable.
 7. **Stateless transport.** No `Mcp-Session-Id`; each POST is independent. `GET`/`DELETE` on
    `/mcp` return 405. Protocol versions `2025-03-26`, `2025-06-18`, and `2025-11-25` are
    accepted; a `2026-07-28` client negotiates down to `2025-11-25`.

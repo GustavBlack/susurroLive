@@ -60,17 +60,23 @@ Hermes registers the tools as `mcp_susurro_<tool>` (for example
 
 ### Skill path (no MCP registration)
 
-If you do not want an `mcp_servers` entry, install the `susurro-live` skill from
-`integrations/hermes/susurro-live/` into `%LOCALAPPDATA%\hermes\skills\audio\susurro-live\`
-(or `hermes skills install <path>`). The packaged app also ships a copy at
-`resources\hermes-skill\susurro-live\`. The skill uses `scripts/susurro.ps1` to launch the app
-and call the same MCP endpoint. It is native Windows only and requires the `terminal` toolset.
+If you do not want an `mcp_servers` entry, install the **`susurro-live-mcp`** skill from
+`integrations/hermes/susurro-live-mcp/` into
+`%LOCALAPPDATA%\hermes\skills\audio\susurro-live-mcp\` (or `hermes skills install <path>`). The
+packaged app also ships a copy at `resources\hermes-skill\susurro-live-mcp\`. The skill uses
+`scripts/susurro.ps1` to launch the app and call the same MCP endpoint. It is native Windows only
+and requires the `terminal` toolset.
+
+**Keep the `-mcp` suffix.** This skill drives a *running* app; a source-maintenance skill for the
+repo usually lives as `susurro-live`. Two Hermes skills declaring the same `name:` cannot both
+load — one silently shadows the other and the shadowed one becomes unreachable — so install this
+one under its own name and leave the directory and frontmatter `name` in sync.
 
 ```bash
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File susurro.ps1 ensure
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File susurro.ps1 start -Profile meeting -Parent D:\Sessions -Name "Weekly Sync"
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File susurro.ps1 stop -Wait
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File susurro.ps1 transcript
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:/path/to/susurro-live-mcp/scripts/susurro.ps1 ensure
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:/path/to/susurro-live-mcp/scripts/susurro.ps1 start -Profile meeting -Parent D:\Sessions -Name "Weekly Sync"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:/path/to/susurro-live-mcp/scripts/susurro.ps1 stop -Wait
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:/path/to/susurro-live-mcp/scripts/susurro.ps1 transcript
 ```
 
 ## Tools

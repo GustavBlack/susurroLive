@@ -1,7 +1,7 @@
 ---
-name: susurro-live
-description: Record and transcribe with susurroLive through its local MCP endpoint
-version: 0.1.0
+name: susurro-live-mcp
+description: Use when driving the running susurroLive app (record, stop, transcript, export, import, diarize) through its local MCP endpoint — skill path, no mcp_servers entry.
+version: 0.2.0
 platforms: [windows]
 metadata:
   hermes:
@@ -17,7 +17,7 @@ metadata:
         default: ""
 ---
 
-# susurroLive
+# susurroLive — MCP control skill
 
 Control the **local** susurroLive recording studio without adding an `mcp_servers` entry to
 Hermes. The skill launches the app if needed, then calls the app's embedded MCP endpoint through
@@ -26,6 +26,21 @@ a PowerShell helper.
 - The app must run in the **interactive Windows desktop session** (mic/loopback capture needs it).
 - The helper reads `%APPDATA%\susurroLive\mcp.json` for the endpoint and bearer token.
 - Never print, echo, or pass the token to any other command. The helper never prints it.
+
+## Name: `susurro-live-mcp`, and why
+
+This skill is deliberately **not** named `susurro-live`. A development/maintenance skill for the
+app's source tree commonly goes by `susurro-live`; two skills with the same `name:` cannot both be
+loaded (one silently shadows the other, and `skill_view` cannot address the loser). Keep the
+suffix:
+
+- MCP control of a running app → **`susurro-live-mcp`** (this skill)
+- Editing the app's source → `susurro-live` (if the user has such a skill)
+
+Install to `%LOCALAPPDATA%\hermes\skills\audio\susurro-live-mcp\`. Do not rename it to
+`susurro-live` when copying, and do not edit `name:` — the directory name and the frontmatter
+`name` must stay identical.
+
 
 ## When to Use
 
@@ -40,11 +55,17 @@ Use this skill when the user asks to:
 
 ## Procedure
 
-Run commands from Git Bash through PowerShell. The script lives next to this file:
+Run commands from Git Bash through PowerShell. The script lives next to this file; use its
+absolute path with forward slashes (MSYS path translation is off for native tools on this host):
 
 ```bash
-PS="powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"$(dirname "$0")/scripts/susurro.ps1\""
+powershell.exe -NoProfile -ExecutionPolicy Bypass \
+  -File "C:/Users/<you>/AppData/Local/hermes/skills/audio/susurro-live-mcp/scripts/susurro.ps1" ensure
 ```
+
+Every example below shows the subcommand only; prefix each with
+`powershell.exe -NoProfile -ExecutionPolicy Bypass -File "<absolute path to susurro.ps1>"`.
+Pass native `D:\...` paths in single quotes from bash.
 
 If the installed app path differs from the default, set `SUSURRO_APP_PATH` or pass `-AppPath`.
 `skills.config.susurro.app_path` is the declared setting; read it with
@@ -141,6 +162,13 @@ All commands accept `-Json` for machine-readable output.
   never require administrator rights.
 - **Remote/WSL/Docker terminal backend**: unsupported. Use native Windows Hermes on the same
   machine as the app.
+- **`start -Parent …` is persistent, not scoped** — it writes `lastSessionParent` into the app's
+  `settings.json`, so later sessions default there. Mention it, or restore the previous parent.
+- **Chunk count follows the user's `chunkSec`** (1 s in a default test setup), so an 8 s clip can
+  report ~12 chunks. That is not an error.
+- **Two skills, one name, is impossible** — if the user also keeps a `susurro-live` development
+  skill, install this one as `susurro-live-mcp`; do not rename the directory or `name:` to match
+  the dev skill.
 
 ## Verification
 

@@ -14,7 +14,17 @@ const os = require('node:os');
 const path = require('node:path');
 
 const repo = path.join(__dirname, '..');
-const script = path.join(repo, 'integrations', 'hermes', 'susurro-live', 'scripts', 'susurro.ps1');
+const script = path.join(repo, 'integrations', 'hermes', 'susurro-live-mcp', 'scripts', 'susurro.ps1');
+
+// The skill must keep a distinct name: Hermes resolves skills by frontmatter `name`, so a skill
+// named `susurro-live` would collide with a source-maintenance skill of that name and one of them
+// would silently become unloadable. Directory name and frontmatter name must agree.
+const skillDir = path.dirname(path.dirname(script));
+const skillMd = fs.readFileSync(path.join(skillDir, 'SKILL.md'), 'utf8');
+const declaredName = (/^name:\s*(\S+)\s*$/m.exec(skillMd) || [])[1];
+assert.equal(declaredName, path.basename(skillDir), 'SKILL.md name must match its directory');
+assert.ok(/-mcp$/.test(declaredName), `skill name must keep the -mcp suffix, got ${declaredName}`);
+assert.ok(!/^name:\s*susurro-live\s*$/m.test(skillMd), 'skill must not claim the bare susurro-live name');
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'susurro-skill-test-'));
 const discoveryPath = path.join(root, 'mcp.json');
 const token = 'a'.repeat(64);

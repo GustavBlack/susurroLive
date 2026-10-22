@@ -99,7 +99,9 @@ Two client paths:
 
 - **Native MCP:** paste the generated `mcp_servers` YAML into Hermes config; tools appear as
   `mcp_susurro_*`.
-- **Skill, no MCP registration:** install `integrations/hermes/susurro-live/`; it launches the
+- **Skill, no MCP registration:** install `integrations/hermes/susurro-live-mcp/` (skill name
+  `susurro-live-mcp` — the `-mcp` suffix keeps it distinct from any `susurro-live` source-dev
+  skill, since two skills with the same name cannot both load); it launches the
   app and calls the same endpoint through `scripts/susurro.ps1` (native Windows only).
 
 Full setup and tool reference: [`docs/mcp.md`](docs/mcp.md). Decision record:
