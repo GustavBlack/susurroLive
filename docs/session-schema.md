@@ -208,7 +208,8 @@ and have it know how to read the data without any other context.
 It carries four things:
 
 1. **The naming convention** — `YYYY-MM-DD_HHMMSS_<Slug>`, local wall clock, zero-padded, so
-   sorting folder names *is* sorting sessions chronologically.
+   sorting folder names *is* sorting sessions chronologically. If that folder already exists,
+   the app appends `-2`, `-3`, … so two sessions created in the same second never collide.
 2. **The folder map** — `audio/`, `transcripts/`, `exports/`, `temp/`, and which are authoritative.
 3. **The JSON Schema** (draft 2020-12) for `session.json`, embedded as a fenced ```json block so a
    reader can extract and validate against it directly.

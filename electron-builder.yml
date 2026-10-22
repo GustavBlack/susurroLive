@@ -48,6 +48,8 @@ extraResources:
     to: bin                      # whisper-cli.exe + DLLs  -> resources/bin/
     filter: ["**/*"]             # includes bin/diarizer/ (nemo-speech.exe + its OWN ggml DLLs;
                                  # a subfolder so they never overwrite whisper's same-named DLLs)
+  - from: integrations/hermes
+    to: hermes-skill             # copyable Hermes skill + PowerShell helper
   - from: native/models
     to: models                   # ggml-*.bin (bundled default)
     filter:

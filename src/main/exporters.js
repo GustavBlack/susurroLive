@@ -145,4 +145,4 @@ function exportAudio(session, outPath, { concatWavs } = {}) {
   throw new Error('no concatenated audio available');
 }
 
-module.exports = { exportTxt, exportJson, exportAudio, fmtTime, projectedWords, checkupActive };
+module.exports = { exportTxt, exportJson, exportAudio, fmtTime, projectedWords, checkupActive, joinWords };

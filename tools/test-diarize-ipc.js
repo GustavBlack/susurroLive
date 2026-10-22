@@ -138,7 +138,7 @@ async function runElectron() {
   const fileA = readFile(folderA);
   check('block persisted in session.json', fileA.diarization?.turns?.length === 2 && fileA.diarization.speakers === 2);
   check('turns relabelled by arrival (raw 2 -> spk0)', fileA.diarization.turns[0].speaker === 'spk0');
-  check('schema version untouched', fileA.version === 1);
+  check('schema version untouched', fileA.version === store.SCHEMA_VERSION);
   const cur = await js('window.susurro.session.current()');
   check('wordSpeakers aligned with words', cur.wordSpeakers?.length === cur.transcript.words.length,
     `${cur.wordSpeakers?.length}/${cur.transcript.words.length}`);

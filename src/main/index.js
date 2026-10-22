@@ -31,6 +31,11 @@ const { probeModels } = require('./llm/client');
 const { runCheckup, applyCheckup } = require('./llm/checkup');
 const { createVocabulary } = require('./llm/vocabulary');
 const { initUpdater } = require('./updater');
+const { createDiscovery } = require('./mcp/discovery');
+const { createMcpServer } = require('./mcp/server');
+const { createTools } = require('./mcp/tools');
+const { createController } = require('./mcp/controller');
+const { createRendererControl } = require('./mcp/renderer-control');
 
 const SMOKE = process.argv.includes('--smoke');
 const SMOKE_SESSION = (process.argv.find((a) => a.startsWith('--smoke-session=')) || '').split('=')[1] || null;
@@ -60,6 +65,10 @@ let checkupRun = null;       // { folder, ctrl } while an LLM checkup run is in 
 let vocabulary = null;       // createVocabulary(userData) — built once after app ready
 let autoDiarizeFolder = null; // session to diarize once its transcription goes idle
 let updaterState = null;
+let rendererReady = false;
+let rendererControl = null;
+let mcpDiscovery = null;
+let mcpServer = null;
 
 function send(evt, payload) {
   if (win && !win.isDestroyed()) win.webContents.send(`evt:${evt}`, payload);
@@ -210,6 +219,164 @@ function publicSession() {
   };
 }
 
+/** Settings patch + the in-flight session's model snapshot (shared by IPC and MCP). */
+function applySettingsPatch(patch = {}) {
+  const next = settings.set(patch || {});
+  if (active && active.model) {
+    if (patch?.model) active.model.name = patch.model;
+    if (patch?.language) active.model.language = patch.language;
+    if (patch?.device) active.model.device = patch.device;
+    if (typeof patch?.vad === 'boolean') active.model.vad = patch.vad;
+    if (patch?.engine === 'whisper' || patch?.engine === 'parakeet') active.model.engine = patch.engine;
+    persist();
+  }
+  return next;
+}
+
+/** Create + activate a session. Shared by the IPC handler and MCP tools. */
+function createSessionFor(opts = {}) {
+  if (recording) return { ok: false, error: 'stop recording before creating another session' };
+  if (importing) return { ok: false, error: 'wait for the import to finish' };
+  try {
+    const parentDir = opts.parentDir || settings.get('lastSessionParent');
+    if (!parentDir) return { ok: false, error: 'no session folder chosen yet' };
+    fs.mkdirSync(parentDir, { recursive: true });
+    settings.set({ lastSessionParent: parentDir });
+    if (opts.engine === 'whisper' || opts.engine === 'parakeet') applySettingsPatch({ engine: opts.engine });
+    if (opts.language) applySettingsPatch({ language: opts.language });
+
+    active = store.createSession({
+      parentDir,
+      name: opts.name || 'Session',
+      settings: settings.all(),
+      gpu,
+      model: { name: opts.model || settings.get('model'), device: opts.device || settings.get('device') },
+      chunkSec: opts.chunkSec || settings.get('chunkSec'),
+      sources: opts.sources || [],
+    });
+    // createSession reads the engine from settings; keep the session snapshot honest.
+    active.model.engine = settings.get('engine') || 'whisper';
+    persist();
+    pipeline = makePipeline();
+    return { ok: true, session: publicSession() };
+  } catch (err) {
+    return { ok: false, error: String(err.message || err) };
+  }
+}
+
+/** Close the active session. Shared by IPC and MCP. */
+function closeSession() {
+  if (recording) return { ok: false, error: 'stop recording before closing the session' };
+  active = null; pipeline = null;
+  return { ok: true };
+}
+
+/** Export one artifact. Shared by the IPC handler and MCP; supports a non-active session. */
+function runExport(kind, session = active) {
+  if (!session) return { ok: false, error: 'no session' };
+  if (kind === 'audio' && recording && session === active) {
+    return { ok: false, error: 'stop recording before exporting audio' };
+  }
+  try {
+    const dir = path.join(session.folder, 'exports');
+    fs.mkdirSync(dir, { recursive: true });
+    let res;
+    if (kind === 'txt') res = exporters.exportTxt(session, path.join(dir, 'full.txt'));
+    else if (kind === 'json') res = exporters.exportJson(session, path.join(dir, 'full.json'));
+    else if (kind === 'audio') res = exporters.exportAudio(session, path.join(dir, 'full.wav'), { concatWavs });
+    else return { ok: false, error: `unknown export kind: ${kind}` };
+
+    const entry = {
+      kind,
+      path: path.relative(session.folder, res.path).replace(/\\/g, '/'),
+      at: new Date().toISOString(),
+    };
+    if (!Array.isArray(session.exports)) session.exports = [];
+    session.exports.push(entry);
+    if (session === active) persist();
+    else store.updateSessionFile(session.folder, (s) => {
+      if (!Array.isArray(s.exports)) s.exports = [];
+      s.exports.push(entry);
+    });
+    return { ok: true, path: res.path, bytes: res.bytes };
+  } catch (err) {
+    return { ok: false, error: String(err.message || err) };
+  }
+}
+
+/** Import audio/video into a session. Shared by IPC and MCP. */
+async function runImport({ mediaPath, parentDir, name } = {}) {
+  try {
+    if (!mediaPath || !fs.existsSync(mediaPath)) return { ok: false, error: 'media file not found' };
+    const ext = path.extname(mediaPath).slice(1).toLowerCase();
+    if (!ffmpegBridge.MEDIA_EXTS.has(ext)) return { ok: false, error: `unsupported file type .${ext}` };
+    const ffmpegPath = ffmpegBridge.findFfmpeg(REPO_ROOT, BIN_DIR);
+    if (!ffmpegPath) return { ok: false, error: 'ffmpeg not found - put ffmpeg.exe in native/bin or on PATH' };
+    const parent = parentDir || settings.get('lastSessionParent');
+    if (!parent) return { ok: false, error: 'no session folder chosen yet' };
+    if (recording) return { ok: false, error: 'stop recording before importing' };
+    fs.mkdirSync(parent, { recursive: true });
+    settings.set({ lastSessionParent: parent });
+
+    importing = true;
+    active = store.createSession({
+      parentDir: parent,
+      name: name || path.basename(mediaPath, path.extname(mediaPath)) || 'Import',
+      settings: settings.all(),
+      gpu,
+      model: { name: settings.get('model'), device: settings.get('device') },
+      chunkSec: settings.get('chunkSec'),
+      sources: [],
+    });
+    pipeline = makePipeline();
+
+    const r = await importMedia({
+      ffmpegPath,
+      session: active,
+      mediaPath,
+      chunkSec: active.recording.chunkSec,
+      onPersist: persist,
+      onProgress: (evt, payload) => { send(evt, payload); send('status', { importing: evt === 'import' && payload?.phase !== 'done' }); },
+    });
+    importing = false;
+    if (!r.ok) { persist(); return r; }
+
+    rebuildTranscript(active);
+    persist();
+    send('recordState', { recording: false });
+    autoDiarizeFolder = active.folder;   // honoured once transcription goes idle
+    if (pipeline) pipeline.enqueueAllOutstanding();
+    send('status', { importing: false });
+    return { ok: true, session: publicSession(), seconds: r.seconds, chunks: r.chunks };
+  } catch (err) {
+    importing = false;
+    return { ok: false, error: String(err.message || err) };
+  }
+}
+
+function getDiarizeStatus() {
+  return {
+    ...diarizer.status({ repoRoot: REPO_ROOT, binDir: BIN_DIR, modelDir: MODEL_DIR }),
+    running: diarizeRun ? diarizeRun.folder : null,
+  };
+}
+
+/** Start/stop/restart the MCP listener after a settings change or at boot. */
+async function applyMcpSettings() {
+  if (!mcpServer) return null;
+  const enabled = settings.get('mcpEnabled') !== false;
+  await mcpServer.stop();
+  if (!enabled) {
+    const info = mcpServer.info();
+    send('mcpStatus', { ...info, enabled: false });
+    return { ...info, enabled: false };
+  }
+  const port = Number(settings.get('mcpPort'));
+  const r = await mcpServer.start(Number.isFinite(port) && port >= 0 ? port : 8790);
+  send('mcpStatus', r);
+  return r;
+}
+
 function makePipeline() {
   return new Pipeline({
     engine: engineSelector,
@@ -259,9 +426,35 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
+      // An agent may record while the window is minimized/occluded; keep the capture graph
+      // and chunk timer running instead of letting Chromium throttle them.
+      backgroundThrottling: false,
     },
   });
   win.loadFile(RENDERER_HTML);
+  win.webContents.on('did-start-loading', () => {
+    rendererReady = false;
+    if (rendererControl) rendererControl.reset('susurroLive UI is reloading; retry when it is ready');
+  });
+  win.webContents.on('render-process-gone', () => {
+    rendererReady = false;
+    if (rendererControl) rendererControl.reset('susurroLive renderer process is gone');
+    // The capture graph is gone with the renderer. Finalize what was written so the session
+    // is not left looking like an active recording.
+    if (recording && recorder) {
+      try { recorder.stop(); } catch { /* already stopped */ }
+      recorder = null;
+      recording = false;
+      if (active) {
+        active.recording.stoppedAt = new Date().toISOString();
+        active.recording.durationSec = Number(
+          active.chunks.reduce((n, c) => n + (c.durationSec || 0), 0).toFixed(2),
+        );
+        persist();
+        if (pipeline) pipeline.enqueueAllOutstanding();
+      }
+    }
+  });
   // Right-click anywhere: the one folder the user owns is the sessions root (v1.5.1).
   win.webContents.on('context-menu', () => {
     const dir = settings.get('lastSessionParent');
@@ -271,7 +464,11 @@ function createWindow() {
       click: () => { if (dir) void shell.openPath(dir); },
     }]).popup({ window: win });
   });
-  win.on('closed', () => { win = null; });
+  win.on('closed', () => {
+    win = null;
+    rendererReady = false;
+    if (rendererControl) rendererControl.reset('susurroLive window closed');
+  });
   return win;
 }
 
@@ -297,18 +494,9 @@ function registerIpc() {
   ipcMain.handle('update:status', () => (updaterState ? { ...updaterState, check: undefined, download: undefined, install: undefined } : { feedConfigured: false }));
 
   ipcMain.handle('settings:get', () => settings.all());
-  ipcMain.handle('settings:set', (_e, patch) => {
-    const next = settings.set(patch || {});
-    // Model / language / device / VAD changes apply to the session in flight, so the next
-    // chunk picks them up without having to start a new session.
-    if (active && active.model) {
-      if (patch?.model) active.model.name = patch.model;
-      if (patch?.language) active.model.language = patch.language;
-      if (patch?.device) active.model.device = patch.device;
-      if (typeof patch?.vad === 'boolean') active.model.vad = patch.vad;
-      if (patch?.engine === 'whisper' || patch?.engine === 'parakeet') active.model.engine = patch.engine;
-      persist();
-    }
+  ipcMain.handle('settings:set', async (_e, patch) => {
+    const next = applySettingsPatch(patch || {});
+    if (patch && ('mcpEnabled' in patch || 'mcpPort' in patch)) await applyMcpSettings();
     return next;
   });
 
@@ -337,29 +525,7 @@ function registerIpc() {
     return res.filePaths[0];
   });
 
-  ipcMain.handle('session:create', (_e, opts = {}) => {
-    if (recording) return { ok: false, error: 'stop recording before creating another session' };
-    try {
-      const parentDir = opts.parentDir || settings.get('lastSessionParent');
-      if (!parentDir) return { ok: false, error: 'no session folder chosen yet' };
-      fs.mkdirSync(parentDir, { recursive: true });
-      settings.set({ lastSessionParent: parentDir });
-
-      active = store.createSession({
-        parentDir,
-        name: opts.name || 'Session',
-        settings: settings.all(),
-        gpu,
-        model: { name: opts.model || settings.get('model'), device: opts.device || settings.get('device') },
-        chunkSec: opts.chunkSec || settings.get('chunkSec'),
-        sources: opts.sources || [],
-      });
-      pipeline = makePipeline();
-      return { ok: true, session: publicSession() };
-    } catch (err) {
-      return { ok: false, error: String(err.message || err) };
-    }
-  });
+  ipcMain.handle('session:create', (_e, opts = {}) => createSessionFor(opts));
 
   ipcMain.handle('session:open', (_e, folder) => activateSession(folder));
 
@@ -380,10 +546,7 @@ function registerIpc() {
   });
 
   ipcMain.handle('session:current', () => publicSession());
-  ipcMain.handle('session:close', () => {
-    if (recording) return { ok: false, error: 'stop recording before closing the session' };
-    active = null; pipeline = null; return { ok: true };
-  });
+  ipcMain.handle('session:close', () => closeSession());
 
   // -------- import prerecorded media (audio or video) --------
   ipcMain.handle('import:pickMedia', async () => {
@@ -396,59 +559,7 @@ function registerIpc() {
     return res.filePaths[0];
   });
 
-  ipcMain.handle('import:run', async (_e, { mediaPath, name } = {}) => {
-    try {
-      if (!mediaPath || !fs.existsSync(mediaPath)) return { ok: false, error: 'media file not found' };
-      const ext = path.extname(mediaPath).slice(1).toLowerCase();
-      if (!ffmpegBridge.MEDIA_EXTS.has(ext)) {
-        return { ok: false, error: `unsupported file type .${ext}` };
-      }
-      const ffmpegPath = ffmpegBridge.findFfmpeg(REPO_ROOT, BIN_DIR);
-      if (!ffmpegPath) {
-        return { ok: false, error: 'ffmpeg not found - put ffmpeg.exe in native/bin or on PATH' };
-      }
-      const parentDir = settings.get('lastSessionParent');
-      if (!parentDir) return { ok: false, error: 'no session folder chosen yet' };
-
-      if (recording) return { ok: false, error: 'stop recording before importing' };
-
-      // Import replaces the active session (same as creating a new one).
-      importing = true;
-      active = store.createSession({
-        parentDir,
-        name: name || path.basename(mediaPath, path.extname(mediaPath)) || 'Import',
-        settings: settings.all(),
-        gpu,
-        model: { name: settings.get('model'), device: settings.get('device') },
-        chunkSec: settings.get('chunkSec'),
-        sources: [],
-      });
-      pipeline = makePipeline();
-
-      const r = await importMedia({
-        ffmpegPath,
-        session: active,
-        mediaPath,
-        chunkSec: active.recording.chunkSec,
-        onPersist: persist,
-        onProgress: (evt, payload) => { send(evt, payload); send('status', { importing: evt === 'import' && payload?.phase !== 'done' }); },
-      });
-      importing = false;
-      if (!r.ok) { persist(); return r; }
-
-      rebuildTranscript(active);
-      persist();
-      send('recordState', { recording: false });
-      autoDiarizeFolder = active.folder;   // honoured once transcription goes idle
-      // Kick off transcription of the whole imported file, live (same as Stop does).
-      if (pipeline) pipeline.enqueueAllOutstanding();
-      send('status', { importing: false });
-      return { ok: true, session: publicSession(), seconds: r.seconds, chunks: r.chunks };
-    } catch (err) {
-      importing = false;
-      return { ok: false, error: String(err.message || err) };
-    }
-  });
+  ipcMain.handle('import:run', (_e, { mediaPath, name } = {}) => runImport({ mediaPath, name }));
 
 
   ipcMain.handle('session:rename', (_e, name) => {
@@ -603,28 +714,7 @@ function registerIpc() {
   }));
 
   // -------- export --------
-  ipcMain.handle('export:run', (_e, kind) => {
-    if (!active) return { ok: false, error: 'no session' };
-    try {
-      const dir = path.join(active.folder, 'exports');
-      fs.mkdirSync(dir, { recursive: true });
-      let res;
-      if (kind === 'txt') res = exporters.exportTxt(active, path.join(dir, 'full.txt'));
-      else if (kind === 'json') res = exporters.exportJson(active, path.join(dir, 'full.json'));
-      else if (kind === 'audio') res = exporters.exportAudio(active, path.join(dir, 'full.wav'), { concatWavs });
-      else return { ok: false, error: `unknown export kind: ${kind}` };
-
-      active.exports.push({
-        kind,
-        path: path.relative(active.folder, res.path).replace(/\\/g, '/'),
-        at: new Date().toISOString(),
-      });
-      persist();
-      return { ok: true, path: res.path, bytes: res.bytes };
-    } catch (err) {
-      return { ok: false, error: String(err.message || err) };
-    }
-  });
+  ipcMain.handle('export:run', (_e, kind) => runExport(kind));
 
   ipcMain.handle('export:reveal', () => {
     if (!active) return { ok: false, error: 'no session' };
@@ -639,10 +729,7 @@ function registerIpc() {
   });
 
   // -------- speaker diarization (post-hoc, turns only) --------
-  ipcMain.handle('diarize:status', () => ({
-    ...diarizer.status({ repoRoot: REPO_ROOT, binDir: BIN_DIR, modelDir: MODEL_DIR }),
-    running: diarizeRun ? diarizeRun.folder : null,
-  }));
+  ipcMain.handle('diarize:status', () => getDiarizeStatus());
   ipcMain.handle('diarize:run', () => diarizeActive());
   // An hour of audio takes minutes on CPU; the user can stop it. Nothing is saved.
   ipcMain.handle('diarize:cancel', () => {
@@ -736,6 +823,47 @@ function registerIpc() {
     catch (err) { return { ok: false, error: String(err.message || err) }; }
   });
 
+  // -------- renderer readiness + local agent (MCP) control surface --------
+  ipcMain.on('app:ready', (event) => {
+    if (!win || event.sender !== win.webContents) return;
+    rendererReady = true;
+    if (rendererControl) rendererControl.markReady();
+  });
+
+  ipcMain.handle('mcp:status', () => ({
+    ...(mcpServer ? mcpServer.info() : { running: false, url: null, port: null, error: null, toolCount: 0, tools: [] }),
+    enabled: settings.get('mcpEnabled') !== false,
+    discoveryPath: mcpDiscovery?.file || null,
+  }));
+  ipcMain.handle('mcp:copyConfig', () => {
+    try {
+      if (!mcpServer) return { ok: false, error: 'MCP server is not initialized' };
+      clipboard.writeText(mcpServer.hermesConfig());
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: String(err.message || err) };
+    }
+  });
+  ipcMain.handle('mcp:rotateToken', () => {
+    try {
+      if (!mcpServer) return { ok: false, error: 'MCP server is not initialized' };
+      const info = mcpServer.rotateToken();
+      send('mcpStatus', info);
+      return { ok: true, ...info };
+    } catch (err) {
+      return { ok: false, error: String(err.message || err) };
+    }
+  });
+  ipcMain.handle('mcp:reveal', () => {
+    try {
+      if (!mcpDiscovery) return { ok: false, error: 'MCP discovery is not initialized' };
+      shell.showItemInFolder(mcpDiscovery.file);
+      return { ok: true, path: mcpDiscovery.file };
+    } catch (err) {
+      return { ok: false, error: String(err.message || err) };
+    }
+  });
+
   ipcMain.handle('shell:reveal', (_e, p) => { if (p) shell.showItemInFolder(p); return { ok: true }; });
   ipcMain.handle('shell:copy', (_e, t) => { clipboard.writeText(String(t ?? '')); return { ok: true }; });
 }
@@ -762,6 +890,38 @@ app.whenReady().then(() => {
   models = new ModelManager({ modelDir: MODEL_DIR, emit: send });
   gpu = detectGpu({ binaryCuda: engine.binaryCuda });
 
+  rendererControl = createRendererControl({ ipcMain, getWindow: () => win });
+  mcpDiscovery = createDiscovery({ userDataDir: app.getPath('userData'), version: app.getVersion() });
+  mcpDiscovery.ensure();
+  const mcpController = createController({
+    appVersion: app.getVersion(),
+    settings, store, exporters, gpu,
+    getActive: () => active,
+    getPipeline: () => pipeline,
+    getRecorder: () => recorder,
+    isRecording: () => recording,
+    isImporting: () => importing,
+    getRendererReady: () => rendererReady,
+    rendererControl,
+    desktopCapturer,
+    send,
+    persist,
+    activateSession,
+    createSessionFor,
+    runExport,
+    runImport,
+    diarizeActive,
+    getDiarizeStatus,
+    getEngineStatus: () => engineSelector.status(),
+    getMcpInfo: () => (mcpServer ? mcpServer.info() : null),
+    applySettingsPatch,
+  });
+  mcpServer = createMcpServer({
+    version: app.getVersion(),
+    tools: createTools(mcpController),
+    discovery: mcpDiscovery,
+  });
+
   registerIpc();
 
   // Optional: preload a session so the renderer boots straight into real content (smoke/dev).
@@ -771,6 +931,7 @@ app.whenReady().then(() => {
   }
 
   createWindow();
+  void applyMcpSettings();
 
   // In-app updates: only active for NSIS-installed, packaged builds (see src/main/updater.js).
   updaterState = initUpdater({ send, userDataDir: app.getPath('userData') });
@@ -1204,6 +1365,7 @@ app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(
 app.on('will-quit', () => {
   try { diarizeRun?.child?.kill(); } catch { /* already gone */ }
   try { checkupRun?.ctrl?.abort(); } catch { /* already gone */ }
+  if (mcpServer) void mcpServer.stop();
 });
 
 /**

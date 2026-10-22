@@ -82,7 +82,9 @@ function validate(raw) {
 
 function createSession({ parentDir, name, settings, gpu, model, chunkSec, sources }) {
   const folderName = `${stamp()}_${slug(name)}`;
-  const root = path.join(parentDir, folderName);
+  // Two sessions created in the same second with the same name must not share a folder.
+  let root = path.join(parentDir, folderName);
+  for (let n = 2; fs.existsSync(root); n++) root = path.join(parentDir, `${folderName}-${n}`);
   fs.mkdirSync(root, { recursive: true });
   ensureDirs(root);
 

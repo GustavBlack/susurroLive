@@ -24,6 +24,7 @@ npm run smoke    # headless boot + screenshot + diagnostics, then exits
 | 5 — UI (warm ink) | ✅ | source array, transport, transcript, squares visualizer, pipeline strip, settings |
 | 6 — playback & export | ✅ | full.wav concat, karaoke follow, `.txt` / `.json` / audio |
 | 7 — package | ✅ | electron-builder portable → `build/susurroLive-1.1.0-portable.exe`; only `small.en` bundled (NSIS ~2 GB payload ceiling) |
+| 8 — agent control | ✅ | local MCP server (loopback + bearer token), 18 tools, renderer command channel, Hermes skill/helper, tests (`tools/test-mcp.js`, `tools/test-susurro-skill.js`, `tools/test-mcp-e2e.js`) |
 
 Also shipped beyond the plan: **pause/resume** (chunk-exact; paused time excluded from timer and
 WAV) and **import** (any audio/video file → a regular session via bundled ffmpeg —
@@ -151,6 +152,11 @@ node tools/test-diarizer.js                      # sidecar module vs tools/fake-
 node tools/test-diarize-ipc.js                   # real main + preload, stubbed sidecar
 node tools/test-exporters.js                     # speaker paragraphs; undiarized byte-identical
 node tools/make-demo-session.js <dir> 1 30 small.en --audio=<wav> --diarized
+
+# agent control (MCP)
+node tools/test-mcp.js                           # HTTP server, auth/Host/Origin, tools, limits
+node tools/test-susurro-skill.js                 # Hermes PowerShell helper vs fake endpoint
+electron tools/test-mcp-e2e.js                   # real renderer + synthetic mic + HTTP recording
 ```
 
 The app can also boot straight into an existing session for inspection:

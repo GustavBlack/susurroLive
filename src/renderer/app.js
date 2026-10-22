@@ -204,12 +204,18 @@ function confirmEndSession() {
 function cancelEndSession() { setEndConfirm(false); }
 
 async function recordAction(action) {
-  if (S.recordBusy) return;
+  if (S.recordBusy) return { ok: false, error: 'another recording action is in progress' };
   S.recordBusy = true;
   renderRecordControls();
-  try { await action(); }
-  catch (err) { showToast(`recording failed: ${err.message || err}`); }
-  finally { S.recordBusy = false; renderRecordControls(); }
+  try {
+    return await action();
+  } catch (err) {
+    showToast(`recording failed: ${err.message || err}`);
+    return { ok: false, error: String(err.message || err) };
+  } finally {
+    S.recordBusy = false;
+    renderRecordControls();
+  }
 }
 
 function renderRecordControls() {
@@ -235,41 +241,64 @@ function renderRecordControls() {
 }
 
 async function resumeRecording() {
-  const res = await api.record.resume();
-  if (!res.ok) { showToast(`resume failed: ${res.error}`); return; }
+  const res = await api.record.resume().catch((err) => ({ ok: false, error: String(err) }));
+  if (!res.ok) { showToast(`resume failed: ${res.error}`); return { ok: false, error: res.error }; }
   S.paused = false;
   engine.resume();
   viz.setCapture(engine.tracks);
   showToast('recording resumed');
+  return { ok: true, paused: false, durationSec: res.durationSec };
 }
 
 async function pauseRecording() {
   engine.pause(); // Cut capture immediately, then finalize the queued PCM in main.
   const res = await api.record.pause().catch((err) => ({ ok: false, error: String(err) }));
-  if (!res.ok) { engine.resume(); showToast(`pause failed: ${res.error}`); return; }
+  if (!res.ok) { engine.resume(); showToast(`pause failed: ${res.error}`); return { ok: false, error: res.error }; }
   S.paused = true;
   S.recordedSeconds = res.durationSec;
   viz.setPaused();
   showToast('paused · resume whenever you’re ready');
+  return { ok: true, paused: true, durationSec: res.durationSec };
 }
 
 async function startRecording() {
-  if (!S.session) { showToast('create or open a session first'); openSessions({ highlight: true }); return; }
-  if (S.session.chunks?.length) { showToast('create a new session to record another take'); openSessions({ highlight: true }); return; }
-  if (S.sources.length === 0) { showToast('add at least one source'); return; }
+  if (!S.session) {
+    showToast('create or open a session first');
+    openSessions({ highlight: true });
+    return { ok: false, error: 'no session' };
+  }
+  if (S.session.chunks?.length) {
+    showToast('create a new session to record another take');
+    openSessions({ highlight: true });
+    return { ok: false, error: 'session already has chunks' };
+  }
+  if (S.sources.length === 0) {
+    showToast('add at least one source');
+    return { ok: false, error: 'no sources' };
+  }
+  return startRecordingWithSources(S.sources);
+}
+
+async function startRecordingWithSources(sources) {
+  S.sources = sources;
+  renderSources();
 
   // Fresh capture each take (browser keeps device handles tight).
   $('player').pause();
   engine = new CaptureEngine({ onPcm: capturePcm });
 
   const res = await engine.start(S.sources);
-  if (!res.ok) { showToast(`capture failed: ${res.error}`); return; }
+  if (!res.ok) { showToast(`capture failed: ${res.error}`); return { ok: false, error: res.error }; }
 
   const startRes = await api.record.start({
     sources: S.sources.map(({ id, kind, deviceId, label, gain, muted }) => ({ id, kind, deviceId, label, gain, muted })),
     sampleRate: engine.sampleRate,
   }).catch((err) => ({ ok: false, error: String(err) }));
-  if (!startRes.ok) { await engine.stop(); showToast(`record failed: ${startRes.error}`); return; }
+  if (!startRes.ok) {
+    await engine.stop();
+    showToast(`record failed: ${startRes.error}`);
+    return { ok: false, error: startRes.error };
+  }
 
   S.recording = true;
   S.paused = false;
@@ -285,6 +314,7 @@ async function startRecording() {
   $('btnPlay').disabled = true;
   $('btnStopPlay').disabled = true;
   showToast('recording');
+  return { ok: true, sampleRate: engine.sampleRate, tracks: engine.tracks.length };
 }
 
 async function stopRecording() {
@@ -293,7 +323,7 @@ async function stopRecording() {
   if (!res.ok) {
     if (!S.paused && S.recording) engine.resume();
     showToast(`stop failed: ${res.error}`);
-    return;
+    return { ok: false, error: res.error };
   }
   await engine.stop();
   viz.setIdle();
@@ -308,6 +338,7 @@ async function stopRecording() {
   showToast(`stopped · ${res.chunks} chunks · ${fmtClock(res.durationSec)}`);
   if (res.audioUrl) loadPlayer(res.audioUrl);
   await refreshSession();
+  return { ok: true, durationSec: res.durationSec, chunks: res.chunks, audioUrl: res.audioUrl };
 }
 
 function loadPlayer(url) {
@@ -916,6 +947,83 @@ async function refreshSession() {
   await refreshDiarStatus();
 }
 
+function normalizeMcpSources(sources) {
+  if (!Array.isArray(sources) || sources.length === 0) throw new Error('recording.start requires a sources array');
+  return sources.map((s, i) => ({
+    id: s.id || `src_mcp_${i}`,
+    kind: s.kind === 'loopback' ? 'loopback' : 'mic',
+    deviceId: s.deviceId == null ? null : s.deviceId,
+    label: s.label || (s.kind === 'loopback' ? 'System Audio' : 'Microphone'),
+    gain: Number.isFinite(Number(s.gain)) ? Number(s.gain) : 1,
+    muted: s.muted === true,
+  }));
+}
+
+async function handleMcpCommand(op, args = {}) {
+  switch (op) {
+    case 'sources.list': {
+      const microphones = await listMicrophones();
+      const loopbacks = await api.capture.desktopSources();
+      return {
+        ok: true,
+        microphones,
+        loopbacks,
+        current: S.sources.map(({ id, kind, deviceId, label, gain, muted }) => ({ id, kind, deviceId, label, gain, muted })),
+        profiles: {
+          meeting: 'default microphone + system loopback',
+          voice: 'default microphone only',
+          system: 'system loopback only',
+          custom: 'explicit sources array',
+        },
+      };
+    }
+    case 'state.get':
+      return {
+        ok: true, recording: S.recording, paused: S.paused,
+        sampleRate: engine.sampleRate, recordedSeconds: S.recordedSeconds,
+        sources: S.sources,
+      };
+    case 'session.refresh':
+      await refreshSession();
+      return { ok: true };
+    case 'recording.start': {
+      await refreshSession();
+      S.sources = normalizeMcpSources(args.sources);
+      renderSources();
+      return recordAction(() => startRecordingWithSources(S.sources));
+    }
+    case 'recording.pause':
+      return recordAction(pauseRecording);
+    case 'recording.resume':
+      return recordAction(resumeRecording);
+    case 'recording.stop':
+      return recordAction(stopRecording);
+    default:
+      return { ok: false, error: `unknown renderer command: ${op}` };
+  }
+}
+
+async function onSessionChanged() {
+  const cur = await api.session.current();
+  if (cur) { await refreshSession(); return; }
+  S.session = null;
+  S.chunks = [];
+  S.words = [];
+  resetTranscript();
+  renderChunks();
+  S.recording = false;
+  S.paused = false;
+  S.recordedSeconds = 0;
+  $('timer').textContent = '00:00';
+  $('recSub').textContent = 'not recording';
+  const p = $('player');
+  p.pause();
+  p.removeAttribute('src');
+  $('btnPlay').disabled = true;
+  $('btnStopPlay').disabled = true;
+  setStatus('Idle', 'idle');
+}
+
 function closeSessions() {
   $('sessionModal').classList.add('hidden');
   $('btnNewSession').classList.remove('cta');
@@ -1032,6 +1140,31 @@ function openSettings() {
   $('settingsDrawer').classList.remove('hidden');
   renderDiag();
   refreshVocab();   // re-read on every drawer open: the file is user-owned
+  refreshMcpStatus();
+}
+
+function renderMcpStatus(st) {
+  if (!st) return;
+  const on = st.enabled !== false;
+  const toggle = $('setMcpEnabled');
+  if (toggle) toggle.checked = on;
+  const status = $('mcpStatus');
+  if (status) {
+    if (!on) status.textContent = 'Off';
+    else if (st.running) status.textContent = `Listening · ${st.toolCount} tool${st.toolCount === 1 ? '' : 's'}`;
+    else status.textContent = st.error || 'Not listening';
+    status.classList.toggle('good', on && st.running);
+    status.classList.toggle('bad', on && !st.running);
+  }
+  const url = $('mcpEndpoint');
+  if (url) url.textContent = st.url || '—';
+}
+
+async function refreshMcpStatus() {
+  if (!api.mcp?.status) return null;
+  const st = await api.mcp.status().catch(() => null);
+  if (st) renderMcpStatus(st);
+  return st;
 }
 
 function renderDiag() {
@@ -1364,6 +1497,21 @@ function wire() {
 
   $('btnSettings').onclick = openSettings;
   $('btnCloseSettings').onclick = () => $('settingsDrawer').classList.add('hidden');
+  $('setMcpEnabled').onchange = async () => {
+    S.settings = await api.settings.set({ mcpEnabled: $('setMcpEnabled').checked });
+    await refreshMcpStatus();
+  };
+  $('btnMcpCopy').onclick = async () => {
+    const r = await api.mcp?.copyConfig?.().catch((err) => ({ ok: false, error: String(err) }));
+    showToast(r?.ok ? 'Hermes config copied to clipboard' : `copy failed: ${r?.error || 'MCP unavailable'}`);
+  };
+  $('btnMcpRotate').onclick = async () => {
+    if (!confirm('Rotate the MCP token? Existing agent configs will stop working until you paste the new token.')) return;
+    const r = await api.mcp?.rotateToken?.().catch((err) => ({ ok: false, error: String(err) }));
+    if (!r?.ok) showToast(`rotate failed: ${r?.error || 'MCP unavailable'}`);
+    else { showToast('MCP token rotated'); await refreshMcpStatus(); }
+  };
+  $('btnMcpReveal').onclick = () => { api.mcp?.reveal?.(); };
   renderTheme();
   $('btnSessions').onclick = openSessions;
   $('btnCloseSessions').onclick = closeSessions;
@@ -1542,6 +1690,19 @@ function wire() {
   };
   $('btnVocabReveal').onclick = () => { api.llm?.vocab?.reveal?.(); };
 
+  // local agent (MCP) -> renderer commands. Always answer, even on failure.
+  api.mcp?.onCommand?.(async (msg) => {
+    let result;
+    try {
+      result = await handleMcpCommand(msg.op, msg.args);
+    } catch (err) {
+      result = { ok: false, error: String(err.message || err) };
+    }
+    api.mcp.respond(msg.id, result);
+  });
+  api.on('sessionChanged', () => { void onSessionChanged(); });
+  api.on('mcpStatus', (st) => renderMcpStatus(st));
+
   // main -> renderer events
   api.on('recordState', (st) => {
     S.recording = !!st.recording;
@@ -1657,6 +1818,7 @@ async function boot() {
   }
   $('setVad').checked = S.settings.vad !== false;
   $('setDiarAuto').checked = !!S.settings.diarizeAutoOnStop;
+  $('setMcpEnabled').checked = S.settings.mcpEnabled !== false;
   // AI transcript checkup — keys may be absent in older settings.json; guard with defaults
   $('setLlmCheckup').checked = S.settings.llmCheckup === true;
   $('setLlmEndpoint').value = S.settings.llmEndpoint || '';
@@ -1678,6 +1840,7 @@ async function boot() {
   renderSources();
   wire();
   watchUpdates();
+  refreshMcpStatus();
 
   const cur = await api.session.current();
   if (cur) await refreshSession();

@@ -754,6 +754,11 @@ html.theme-anim * {
 .llm-row { display: flex; align-items: flex-end; gap: 8px; margin: 6px 0 10px; }
 .llm-row .field { margin-bottom: 0; }
 .llm-row input[type="text"], .llm-row input:not([type]) { flex: 1; }
+.mcp-status { font-size: 11px; color: var(--muted); font-family: var(--font-mono); white-space: nowrap; }
+.mcp-status.good { color: var(--sage-2); }
+.mcp-status.bad { color: var(--rust); }
+.mcp-endpoint { font-size: 10px; color: var(--muted-2); font-family: var(--font-mono);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
 #vocabTerms {
   width: 100%; box-sizing: border-box;
   background: var(--ink-250); color: var(--paper);

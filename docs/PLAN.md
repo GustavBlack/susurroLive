@@ -7,9 +7,11 @@
 > uses Electron's own getUserMedia + desktopCapturer loopback instead of a native module, and
 > session validation is a hand-rolled validator instead of zod.
 >
-> Shipped beyond the original plan: **pause/resume** (chunk-exact, paused time excluded) and
+> Shipped beyond the original plan: **pause/resume** (chunk-exact, paused time excluded),
 > **media import** (any audio/video file → a regular session via bundled ffmpeg, see
-> `src/main/importer.js`).
+> `src/main/importer.js`), and **local agent control (MCP)** — a loopback Streamable HTTP
+> server plus a Hermes skill/helper for launching and recording without MCP registration. See
+> [`mcp.md`](mcp.md) and ADR 0008.
 
 **Goal:** a portable, single-file Windows app that records a multi-source mix, transcribes it in a
 streaming (chunk-by-chunk) pipeline, stores everything in a reopenable session, and plays back the

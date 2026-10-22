@@ -1,7 +1,7 @@
 {
   "name": "susurro-live",
   "productName": "susurroLive",
-  "version": "1.6.1",
+  "version": "1.7.0",
   "description": "Live, portable, multi-source transcription studio.",
   "private": true,
   "author": "Gustav L.",
@@ -10,6 +10,9 @@
   "scripts": {
     "dev": "electron .",
     "smoke": "electron . --smoke",
+    "test:mcp": "node tools/test-mcp.js",
+    "test:skill": "node tools/test-susurro-skill.js",
+    "test:mcp:e2e": "electron tools/test-mcp-e2e.js",
     "native:whisper": "powershell -ExecutionPolicy Bypass -File scripts/fetch-whisper-prebuilt.ps1",
     "native:models": "powershell -ExecutionPolicy Bypass -File scripts/fetch-models.ps1",
     "native:diarizer": "powershell -ExecutionPolicy Bypass -File scripts/build-diarizer.ps1",

@@ -9,7 +9,7 @@ const EVENTS = [
   'diarizeProgress', 'diarizeDone', 'diarizeError',
   'llmCheckupProgress', 'llmCheckupDone', 'llmCheckupError',
   'parakeetProgress', 'parakeetDone', 'parakeetError',
-  'updateStatus',
+  'updateStatus', 'mcpCommand', 'sessionChanged', 'mcpStatus',
 ];
 
 const listeners = new Map();
@@ -120,6 +120,16 @@ contextBridge.exposeInMainWorld('susurro', {
     check: () => ipcRenderer.invoke('update:check'),
     download: () => ipcRenderer.invoke('update:download'),
     install: () => ipcRenderer.invoke('update:install'),
+  },
+
+  // ---- local agent (MCP) ----
+  mcp: {
+    onCommand: (cb) => on('mcpCommand', cb),
+    respond: (id, result) => ipcRenderer.send('mcp:response', { id, result }),
+    status: () => ipcRenderer.invoke('mcp:status'),
+    copyConfig: () => ipcRenderer.invoke('mcp:copyConfig'),
+    rotateToken: () => ipcRenderer.invoke('mcp:rotateToken'),
+    reveal: () => ipcRenderer.invoke('mcp:reveal'),
   },
 
   // ---- export / shell ----

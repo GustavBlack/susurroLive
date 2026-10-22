@@ -8,7 +8,7 @@
 cloud) built for one job: capture the audio happening *around* the machine — a meeting, an interview,
 a session, a room — and hand back clean text, JSON with timecodes, and the audio itself.
 
-**v1.6.0** · Windows 10/11 x64 · BSD-3-Clause · ships as an installer **or** a single portable `.exe`
+**v1.7.0** · Windows 10/11 x64 · BSD-3-Clause · ships as an installer **or** a single portable `.exe`
 
 ---
 
@@ -63,6 +63,7 @@ CUDA or Python install.
 | **Export** | Clean `.txt`, timecoded `.json`, and the audio itself — with speaker paragraphs / per-word speakers when identified. Exports mirror exactly what you see (checked or original). (`.srt`/`.vtt` → v2.) |
 | **Themes** | 11 built-in themes, each with a dark and a light variant, swapped with an animation. |
 | **Agent-ready sessions** | Every session folder carries an `AGENTS.md` with the folder map and the `session.json` schema, so any coding agent can read a session without guessing. |
+| **Agent control (MCP)** | Optional local MCP server: an agent can start/stop recordings, choose the session folder, add mic/system sources by profile, wait for transcription, and read/export the transcript. Loopback + bearer token; see [Agent control (MCP)](docs/mcp.md). |
 | **Portable** | Installer or one `.exe`. No Python, no CUDA install, no cloud account. |
 
 ## Engines
@@ -78,6 +79,31 @@ engine instead of silently doing nothing:
 
 Routing is per call, so a session started with one engine can be continued with the other — every
 chunk records which engine actually produced it.
+
+## Agent control (MCP)
+
+susurroLive 1.7 embeds a local **MCP server** at `http://127.0.0.1:8790/mcp`. When the app is
+open, Hermes Agent (or any MCP client) can record and retrieve transcripts without launching a
+second process:
+
+- `recording_start` with `parentDir` + `name` creates the session folder and starts capture.
+- `profile: "meeting"` adds the default microphone **and** system loopback; `voice` adds only
+  the mic; `system` adds only loopback; `custom` takes an explicit source array.
+- `recording_stop {waitForTranscription:true}` finalizes the session and drains the chunk queue.
+- `transcript_get` returns prose or timecoded words; `export_run` writes `.txt` / `.json` / audio.
+
+**Security:** loopback-only bind, bearer token in `%APPDATA%\susurroLive\mcp.json`, Host/Origin
+checks, 1 MiB request cap. Disable in Settings → Agents (MCP).
+
+Two client paths:
+
+- **Native MCP:** paste the generated `mcp_servers` YAML into Hermes config; tools appear as
+  `mcp_susurro_*`.
+- **Skill, no MCP registration:** install `integrations/hermes/susurro-live/`; it launches the
+  app and calls the same endpoint through `scripts/susurro.ps1` (native Windows only).
+
+Full setup and tool reference: [`docs/mcp.md`](docs/mcp.md). Decision record:
+[`docs/adr/0008-mcp-agent-control.md`](docs/adr/0008-mcp-agent-control.md).
 
 ## AI transcript checkup (opt-in)
 
@@ -131,12 +157,13 @@ a multilingual model in Settings.
 
 ## Status
 
-**v1.6.0 is built, verified, and published** — installer + portable + update feed. Verified by real
+**v1.7.0 is built, verified, and published** — installer + portable + update feed. Verified by real
 execution on this machine, not claims:
 
 | Check | Result |
 | --- | --- |
-| Test suite | 9/9 suites green: engine, pipeline, session manifest, import, exporters, visualizer, LLM harness (9 cases), checkup IPC, parakeet engine (SKIP when unprovisioned) |
+| Test suite | 12/12 suites green: engine, pipeline, session manifest, import, exporters, visualizer, LLM harness (9 cases), checkup IPC, parakeet engine (SKIP when unprovisioned), MCP protocol/auth, Hermes skill helper, MCP recording E2E |
+| MCP | loopback server starts with the app; 18 tools; bearer/Host/Origin guards; token rotation; real recording → stop → transcript through HTTP |
 | App boot | window renders at 820×1040, **0 page errors**; dev **and** packaged `--smoke` pass |
 | Packaged smoke | exercises the real installed payload: bundled model, `resources/bin` engine, GPU probe, update check |
 | GPU probe | RTX 5090, sm_120, 32 GB VRAM, driver 617.42 → **accelerated** (Blackwell via whisper.cpp CUDA arch 120) |

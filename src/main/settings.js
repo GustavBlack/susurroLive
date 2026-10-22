@@ -22,6 +22,8 @@ const DEFAULTS = {
   llmModel: '',              // model id as the endpoint names it
   llmContextTokens: 8192,    // overwritten by probe when the endpoint exposes it
   llmThinking: 'auto',       // auto | off (off skips the think-tag strip)
+  mcpEnabled: true,          // local agent control surface (loopback + bearer token)
+  mcpPort: 8790,             // fixed so Hermes configs stay valid across launches
 };
 
 function createSettings(userDataDir) {

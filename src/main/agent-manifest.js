@@ -20,7 +20,7 @@ const fs = require('fs');
 const path = require('path');
 
 const FILENAME = 'AGENTS.md';
-const MANIFEST_VERSION = 5;
+const MANIFEST_VERSION = 6;
 
 const TEMPLATE = `# AGENTS.md — how to read this susurroLive session folder
 
@@ -58,6 +58,8 @@ A session is a folder named \`YYYY-MM-DD_HHMMSS_<Slug>\`:
   sort**. Sorting folder names is a valid way to order sessions in time.
 - The slug is the session name with each run of non-word characters collapsed to \`-\`, leading
   and trailing dashes stripped, truncated to 48 characters, and defaulting to \`session\`.
+- If a folder with that exact name already exists, the app appends \`-2\`, \`-3\`, … so two
+  sessions created in the same second never share a folder.
 - Session folders are siblings under a parent folder the user chose
   (e.g. \`D:\\Sessions\\2026-09-12_143022_Weekly-Sync\`). Never assume a fixed parent.
 

@@ -225,6 +225,23 @@
         <div class="hint">Runs only when you click the checkup button; sends the transcript to the endpoint above. Nothing is sent automatically.</div>
       </div>
 
+      <div class="field-block" id="mcpBlock">
+        <div class="field-label">Agents (MCP)</div>
+        <label class="row-check">
+          <input type="checkbox" id="setMcpEnabled" checked /> <span>Allow local agents to control susurroLive</span>
+        </label>
+        <div class="llm-row">
+          <span id="mcpStatus" class="mcp-status">Off</span>
+          <span id="mcpEndpoint" class="mcp-endpoint">—</span>
+        </div>
+        <div class="llm-row">
+          <button id="btnMcpCopy" class="btn btn-sm">Copy Hermes config</button>
+          <button id="btnMcpRotate" class="btn btn-sm">Rotate token</button>
+          <button id="btnMcpReveal" class="btn btn-sm">Show mcp.json</button>
+        </div>
+        <div class="hint">Local only (127.0.0.1) with a bearer token. Agents can start/stop recordings and read transcripts. Disable to revoke.</div>
+      </div>
+
       <div class="field-block" id="aboutBlock">
         <div class="field-label">About</div>
         <div class="about-row">

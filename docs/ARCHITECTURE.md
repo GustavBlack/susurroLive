@@ -48,6 +48,7 @@ Three processes, one contract.
 | **Main** | Node | Everything stateful: capture, mixing, chunking, queueing, sessions, GPU probing, exports. |
 | **whisper sidecar** | Native | Transcribe one audio file → timecoded JSON. Stateless per invocation. |
 | **diarizer sidecar** | Native | Once per session, after transcription: `full.wav` → speaker turns (JSON). Stateless. |
+| **MCP server** | Node `http` (main) | Stateless Streamable HTTP on `127.0.0.1:8790`; bearer token; fixed tool allowlist. See [`mcp.md`](mcp.md). |
 
 ### Speaker diarization (post-hoc)
 
@@ -95,6 +96,26 @@ on('progress',    (p: Progress) => …)                        // model dl, expo
 
 Design rule: **main owns truth; renderer holds a projection.** The renderer can be reloaded at any
 time and re-hydrates from `session.json` + a state snapshot requested over IPC.
+
+### Agent control (MCP)
+
+The embedded MCP server lives in main, but capture must stay in the renderer. MCP tools therefore
+use a second, narrow request/response channel:
+
+```
+agent ── POST /mcp ──► main MCP server ── controller (session/pipeline/export)
+                              │
+                              └─ evt:mcpCommand {id,op,args} ──► renderer
+                                   renderer runs the same functions as the buttons
+                              ◄── mcp:response {id,result} ─────┘
+```
+
+Commands are allowlisted (`recording.start/pause/resume/stop`, `sources.list`,
+`session.refresh`, `state.get`); arbitrary JS is never evaluated. Main waits for the renderer's
+existing `app:ready` signal, serializes mutating tools, and stops the recorder if the renderer
+crashes mid-recording. The server is loopback-only with a bearer token in
+`%APPDATA%\susurroLive\mcp.json`; Host/Origin guards and a 1 MiB body cap are enforced. Full
+contract: ADR 0008 and [`mcp.md`](mcp.md).
 
 ## Capture layer
 
