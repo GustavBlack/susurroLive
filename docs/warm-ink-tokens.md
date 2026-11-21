@@ -1,5 +1,11 @@
 # Warm Ink — Style Tokens for susurroLive
 
+> **Archived in v1.8.0.** The app now uses **Tech Moca** (`src/renderer/theme/tech-moca.css`).
+> This file documents the Warm Ink palette that the 11 archived themes were built on. In v1.9.0
+> those themes return as chroma-only skins on top of the Tech Moca redesign; the skin colour source
+> is `src/renderer/theme/themes.js`. See
+> [`v1.8.0-tech-moca-redesign.md`](v1.8.0-tech-moca-redesign.md).
+
 Extracted from `Warm-Ink-Style-Bible.html` (base) and `Warm-Ink-Atari-Edition.html` (chromatic
 variant). susurroLive uses the **base Warm Ink** palette with the Atari edition's amber/ochre
 accents as the "active/record" family.

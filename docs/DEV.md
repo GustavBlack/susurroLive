@@ -2,6 +2,17 @@
 
 ## Run it
 
+> **v1.9.0 UI:** Tech Moca is the base design; the 11 earlier themes return as chroma-only skins
+> (Settings → Appearance), the window is frameless with Tech Moca controls, and the app icon is the
+> yellow cube mark. See [`v1.8.0-tech-moca-redesign.md`](v1.8.0-tech-moca-redesign.md).
+>
+> The smoke harness runs headless by default. Add `-- --smoke-show` to `npm run smoke` when you
+> want the window visible and the `native/_smoke*.png` artifacts to reflect the painted frame.
+>
+> Skins: `npm run gen:skins` regenerates `src/renderer/theme/skins.css` + `skins.json` from
+> `skins.js`; `npm run check:skins` runs the contrast gate. Icon: `npm run icon` rebuilds
+> `assets/icon.ico` from the raw artwork.
+
 Double-click **`run-susurroLive.bat`** in the project root. It checks Node, reports
 whisper/GPU status, installs dependencies on first run, then launches the app.
 
@@ -21,7 +32,7 @@ npm run smoke    # headless boot + screenshot + diagnostics, then exits
 | 2 — capture layer | ✅ | mic + system loopback → gain → analyser → mix → PCM16 → main |
 | 3 — streaming pipeline | ✅ | chunk closes → queued → whisper → timecoded merge, during recording |
 | 4 — session system | ✅ | folder + `session.json` + `AGENTS.md` (per-folder agent contract), create/open/list/rename, crash-recovery statuses |
-| 5 — UI (warm ink) | ✅ | source array, transport, transcript, squares visualizer, pipeline strip, settings |
+| 5 — UI (Tech Moca + skins, v1.9.0) | ✅ | source array, transport, transcript, squares visualizer, pipeline strip, floating tabbed settings, 11 skins, frameless controls |
 | 6 — playback & export | ✅ | full.wav concat, karaoke follow, `.txt` / `.json` / audio |
 | 7 — package | ✅ | electron-builder portable → `build/susurroLive-1.1.0-portable.exe`; only `small.en` bundled (NSIS ~2 GB payload ceiling) |
 | 8 — agent control | ✅ | local MCP server (loopback + bearer token), 18 tools, renderer command channel, Hermes skill/helper, tests (`tools/test-mcp.js`, `tools/test-susurro-skill.js`, `tools/test-mcp-e2e.js`) |
@@ -32,7 +43,7 @@ WAV) and **import** (any audio/video file → a regular session via bundled ffmp
 
 ## Manual test checklist
 
-1. **Boot** — window opens at 820×1040, Warm Ink palette, banner tells you LIVE vs DEMO.
+1. **Boot** — window opens at 820×1040, Tech Moca palette, banner tells you LIVE vs DEMO.
 2. **Folder** — click *Session folder…* → pick a parent dir. Then *Sessions ▤ → New session…*.
 3. **Sources** — *＋ Microphone* adds a row with a device dropdown + live meter.
    *＋ System Audio* adds the WASAPI loopback row. Play music → its meter should move.
@@ -99,10 +110,10 @@ The transcript is **continuous prose**, not one line per timestamp:
   and never break the text flow.
 - Rendering is **incremental** — each new chunk appends words instead of rebuilding the DOM, so
   scroll position and the active-word highlight survive every update.
-- **⤓ follow** appears when you scroll away. Re-engaging it turns on teleprompter mode: the spoken
+- **Follow** appears when you scroll away. Re-engaging it turns on teleprompter mode: the spoken
   word is held ~38% down the panel and the view only moves when it leaves that band. Implausibly
   large jumps (from a bad chunk) **snap** instead of animating, so the view can't be flung.
-- **Scrollbars are themed** (dark track, slim rounded thumb, no arrow buttons) via
+- **Scrollbars are themed** (thin floating pill on no track, no arrow buttons) via
   `::-webkit-scrollbar` at the bottom of `style.css`. ⚠️ Never set `scrollbar-width` anywhere in
   the CSS: when it is present Chromium switches to the standard scrollbar and **silently ignores
   every `::-webkit-scrollbar` rule**, which is exactly how the light-grey default reappears.

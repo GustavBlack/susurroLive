@@ -1,5 +1,10 @@
 # susurroLive — Execution Plan
 
+> **v1.9.0 (2026-11-21):** Phase II of the Tech Moca redesign: the 11 earlier themes return as
+> chroma-only skins, the window is frameless with Tech Moca controls, and the app icon is the yellow
+> cube mark. Phase I (v1.8.0) is the base design. See
+> [`v1.8.0-tech-moca-redesign.md`](v1.8.0-tech-moca-redesign.md).
+>
 > **Implementation status (2026-09-22):** **v1.1.0 is shipped** — Phases 0–7 are complete,
 > including the portable single-`.exe` package (`build/susurroLive-1.1.0-portable.exe`).
 > See [`DEV.md`](DEV.md) for how to run it and what to test by hand. Three deviations from this

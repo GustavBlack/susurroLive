@@ -23,15 +23,15 @@ app.whenReady().then(async () => {
   try {
     const labels = ['Woven idle', 'Ripple idle', 'Transcribing', 'Paused', 'Live sources'];
     await win.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(`<!doctype html><html><head><style>
-      body { margin:0; padding:24px; background:#131514; color:#a99e98; font:13px system-ui; display:flex; gap:18px }
-      section { padding:12px; background:#1f201f; border:1px solid #454442; border-radius:8px }
+      body { margin:0; padding:24px; background:#141414; color:#9b978f; font:13px "Segoe UI",system-ui; display:flex; gap:18px }
+      section { padding:12px; background:#1b1b1b; border:1px solid #2c2c2c; border-radius:10px }
       p { margin:0 0 14px } canvas { display:block; width:208px; height:600px }
       </style></head><body>${labels.map((label) => `<section><p>${label}</p><canvas width="208" height="600"></canvas></section>`).join('')}</body></html>`));
-    // v1.5: viz.js imports './theme/themes.js', unresolvable from a data:-URL module.
-    // Bundle the pair for the harness (themes.js itself imports nothing).
-    const themesSrc = fs.readFileSync(path.join(__dirname, '../src/renderer/theme/themes.js'), 'utf8');
+    // v1.8: viz.js imports './theme/tech-moca.js', unresolvable from a data:-URL module.
+    // Bundle the pair for the harness (tech-moca.js itself imports nothing).
+    const themesSrc = fs.readFileSync(path.join(__dirname, '../src/renderer/theme/tech-moca.js'), 'utf8');
     const vizSrc = fs.readFileSync(path.join(__dirname, '../src/renderer/viz.js'), 'utf8')
-      .replace(/import\s*\{[^}]*\}\s*from\s*'\.\/theme\/themes\.js';/, '');
+      .replace(/import\s*\{[^}]*\}\s*from\s*'\.\/theme\/tech-moca\.js';/, '');
     const moduleUrl = 'data:text/javascript;base64,' + Buffer.from(themesSrc + '\n' + vizSrc, 'utf8').toString('base64');
     const results = await win.webContents.executeJavaScript(`(async () => {
       const { Visualizer } = await import(${JSON.stringify(moduleUrl)});

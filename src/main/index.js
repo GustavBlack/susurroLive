@@ -38,6 +38,7 @@ const { createController } = require('./mcp/controller');
 const { createRendererControl } = require('./mcp/renderer-control');
 
 const SMOKE = process.argv.includes('--smoke');
+const SMOKE_SHOW = process.argv.includes('--smoke-show');
 const SMOKE_SESSION = (process.argv.find((a) => a.startsWith('--smoke-session=')) || '').split('=')[1] || null;
 const SMOKE_IMPORT = process.argv.includes('--smoke-import');
 
@@ -402,13 +403,9 @@ function activateSession(folder) {
 }
 
 // ---------------------------------------------------------------- window
-/** Pre-paint flash color: the persisted theme's background (generated data mirror). */
+/** Pre-paint flash color: Tech Moca's floor for the persisted mode (theme/tech-moca.css). */
 function themeBackgroundColor() {
-  try {
-    const themes = require('./renderer/theme/themes.json');
-    const t = themes.find((x) => x.id === settings?.get('theme')) || themes[0];
-    return (settings?.get('themeMode') === 'light' ? t.light : t.dark).bg;
-  } catch { return '#18181b'; }
+  return settings?.get('themeMode') === 'light' ? '#ece9e2' : '#141414';
 }
 
 function createWindow() {
@@ -419,7 +416,11 @@ function createWindow() {
     minHeight: 880,
     backgroundColor: themeBackgroundColor(),
     title: 'susurroLive',
-    show: !SMOKE,
+    // Hidden title bar, not frame:false: Windows keeps edge resize, shadow,
+    // Win11 rounded corners, drag snap and Win+arrow. The header draws the controls.
+    titleBarStyle: 'hidden',
+    icon: app.isPackaged ? undefined : path.join(__dirname, '..', '..', 'assets', 'icon.ico'),
+    show: !SMOKE || SMOKE_SHOW,
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, '..', 'preload', 'index.js'),
@@ -431,7 +432,33 @@ function createWindow() {
       backgroundThrottling: false,
     },
   });
+  win.setMenuBarVisibility(false);
   win.loadFile(RENDERER_HTML);
+
+  // Frameless window: push the maximize/focus state so the renderer's glyph stays
+  // correct after a snap, Win+arrow, double-click or system restore.
+  const sendWindowState = () => {
+    if (!win || win.isDestroyed()) return;
+    win.webContents.send('evt:windowState', {
+      maximized: win.isMaximized(),
+      focused: win.isFocused(),
+    });
+  };
+  win.on('maximize', sendWindowState);
+  win.on('unmaximize', sendWindowState);
+  win.on('restore', sendWindowState);
+  win.on('focus', sendWindowState);
+  win.on('blur', sendWindowState);
+
+  // autoHideMenuBar removes the menu accelerators; keep DevTools reachable.
+  win.webContents.on('before-input-event', (event, input) => {
+    if (input.type !== 'keyDown') return;
+    if (input.key === 'F12' || (input.control && input.shift && input.key.toLowerCase() === 'i')) {
+      win.webContents.toggleDevTools();
+      event.preventDefault();
+    }
+  });
+
   win.webContents.on('did-start-loading', () => {
     rendererReady = false;
     if (rendererControl) rendererControl.reset('susurroLive UI is reloading; retry when it is ready');
@@ -478,6 +505,29 @@ function registerIpc() {
   ipcMain.handle('app:paths', () => ({
     repo: REPO_ROOT, bin: BIN_DIR, models: MODEL_DIR, userData: app.getPath('userData'),
   }));
+
+  // Frameless window controls. Resolve the sender's own window; never trust a
+  // renderer-supplied id.
+  const senderWindow = (event) => BrowserWindow.fromWebContents(event.sender);
+  ipcMain.handle('window:minimize', (event) => {
+    const w = senderWindow(event);
+    if (w) w.minimize();
+  });
+  ipcMain.handle('window:toggleMaximize', (event) => {
+    const w = senderWindow(event);
+    if (!w) return false;
+    if (w.isMaximized()) w.unmaximize();
+    else w.maximize();
+    return w.isMaximized();
+  });
+  ipcMain.handle('window:close', (event) => {
+    const w = senderWindow(event);
+    if (w) w.close();
+  });
+  ipcMain.handle('window:isMaximized', (event) => {
+    const w = senderWindow(event);
+    return !!w && w.isMaximized();
+  });
 
   ipcMain.handle('gpu:probe', () => gpu);
   ipcMain.handle('engine:status', () => ({ ...engine.status(), gpu, engines: engineSelector.status() }));
@@ -955,6 +1005,8 @@ async function runSmoke() {
     // (and the renderer persists whisper), so capturing it later would record the flip as
     // the user's choice and the end-of-smoke restore would write whisper back to real settings.
     const engineAtStart = settings.get('engine');
+    const themeAtStart = settings.get('theme');
+    const themeModeAtStart = settings.get('themeMode');
 
     // Smoke artifacts live in the repo during dev; a packaged build has no repo,
     // so land them in temp instead (the asar is not a writable directory).
@@ -967,81 +1019,303 @@ async function runSmoke() {
     fs.mkdirSync(path.dirname(out), { recursive: true });
     fs.writeFileSync(out, img.toPNG());
 
-    // 2) settings drawer, to exercise the model manager. boot/wire is async, so
-    //    poll until the drawer is actually visible before capturing.
-    let drawerGeom = '';
-    for (let i = 0; i < 50 && !/true/.test(drawerGeom); i++) {
+    // 2) settings: a floating window with tabs. boot/wire is async, so poll until
+    //    the window is actually visible before capturing.
+    let settingsGeom = '';
+    for (let i = 0; i < 50 && !/true/.test(settingsGeom); i++) {
       await win.webContents.executeJavaScript("document.getElementById('btnSettings')?.click()");
       await new Promise((r) => setTimeout(r, 200));
-      drawerGeom = await win.webContents.executeJavaScript(
-        '(() => { const d = document.getElementById("settingsDrawer");' +
-        ' const r = d.getBoundingClientRect();' +
-        ' return JSON.stringify({ open: !d.classList.contains("hidden"), x: r.x, w: r.width, vw: innerWidth, dpr: devicePixelRatio, disp: getComputedStyle(d).display }); })()');
+      settingsGeom = await win.webContents.executeJavaScript(
+        '(() => { const w = document.getElementById("settingsWindow");' +
+        ' const b = document.getElementById("settingsDrawer");' +
+        ' const r = w.getBoundingClientRect();' +
+        ' const tabs = [...document.querySelectorAll(".settings-tab")].map(t => t.id);' +
+        ' const active = document.querySelector(".settings-tab.is-active")?.id || "";' +
+        ' const engineOpen = !document.getElementById("panel-engine").classList.contains("hidden");' +
+        ' const othersClosed = ["transcription","appearance","checkup","agents","about"].every(t => document.getElementById("panel-" + t).classList.contains("hidden"));' +
+        ' return JSON.stringify({ open: !b.classList.contains("hidden"), x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height), vw: innerWidth, vh: innerHeight, tabs, active, engineOpen, othersClosed }); })()');
     }
-    console.log('[smoke] drawer geom  :', drawerGeom);
-    const hitTest = await win.webContents.executeJavaScript(
-      '(() => { const el = document.elementFromPoint(640, 500);' +
-      ' return el ? (el.id || el.className || el.tagName) : "none"; })()');
-    console.log('[smoke] hit @640,500:', hitTest);
-    img = await win.webContents.capturePage();
-    const out2 = smokePath('_smoke_settings.png');
-    fs.writeFileSync(out2, img.toPNG());
-
-    // 2.5) v1.5 theme swap: pick Tokyo Night, verify staged animation + persistence.
-    const themeCheck = await win.webContents.executeJavaScript(`(async () => {
-      let head = null;
-      for (let i = 0; i < 50 && !head; i++) {   // wire() may still be awaiting boot
-        head = document.querySelector('.theme-dd-head');
-        if (!head) await new Promise((r) => setTimeout(r, 100));
-      }
-      if (!head) return JSON.stringify({ fail: 'no theme dropdown head rendered' });
-      head.click();                             // expand the dropdown list
-      await new Promise((r) => setTimeout(r, 120));
-      let opt = null;
-      for (let i = 0; i < 50 && !opt; i++) {
-        opt = document.querySelector('.theme-opt[data-id="tokyo"]');
-        if (!opt) await new Promise((r) => setTimeout(r, 100));
-      }
-      if (!opt) return JSON.stringify({ fail: 'no tokyo option rendered' });
-      opt.click();
-      await new Promise((r) => setTimeout(r, 120));   // inside the 780 ms anim window
-      const html = document.documentElement;
-      const midAnim = html.classList.contains('theme-anim');
-      const accent = getComputedStyle(html).getPropertyValue('--accent').trim();
-      await new Promise((r) => setTimeout(r, 900));   // past the 780 ms cleanup
-      return JSON.stringify({
-        theme: html.dataset.theme,
-        mode: html.dataset.themeMode,
-        midAnim,
-        animCleared: !html.classList.contains('theme-anim'),
-        accent,
-      });
-    })()`);
-    console.log('[smoke] theme swap   :', themeCheck);
+    console.log('[smoke] settings window:', settingsGeom);
     try {
-      const tc = JSON.parse(themeCheck);
-      if (tc.fail || tc.theme !== 'tokyo' || tc.mode !== 'dark' || !tc.midAnim || !tc.animCleared || !/^#7aa2f7$/i.test(tc.accent)) {
-        console.error(`[smoke] FAILED: theme swap state wrong: ${themeCheck}`);
+      const sg = JSON.parse(settingsGeom);
+      const centered = Math.abs(sg.x + sg.w / 2 - sg.vw / 2) < 4 && Math.abs(sg.y + sg.h / 2 - sg.vh / 2) < 4;
+      const floating = sg.open && sg.w <= sg.vw - 16 && sg.h <= sg.vh - 16 && centered;
+      const tabsOk = sg.tabs.length === 6 && sg.active === 'tab-engine' && sg.engineOpen && sg.othersClosed;
+      if (!floating || !tabsOk) {
+        console.error(`[smoke] FAILED: settings window wrong: ${settingsGeom}`);
         process.exitCode = 1;
       }
     } catch { /* non-fatal */ }
-    const themePersisted = (() => { try { return JSON.parse(fs.readFileSync(settings.file, 'utf8')).theme; } catch { return null; } })();
-    console.log('[smoke] theme persisted:', themePersisted);
-    if (themePersisted !== 'tokyo') {
-      console.error('[smoke] FAILED: theme choice not persisted to settings.json');
+    const hitTest = await win.webContents.executeJavaScript(
+      '(() => { const el = document.elementFromPoint(innerWidth / 2, innerHeight / 2);' +
+      ' return el ? (el.id || el.className || el.tagName) : "none"; })()');
+    console.log('[smoke] hit @center:', hitTest);
+
+    // 2.1) v1.9 frameless window: custom Tech Moca controls, drag strip, maximize/restore.
+    const frameCheck = await win.webContents.executeJavaScript(`JSON.stringify({
+      min: !!document.getElementById('btnMinimize'),
+      max: !!document.getElementById('btnMaximize'),
+      close: !!document.getElementById('btnCloseWindow'),
+      drag: getComputedStyle(document.querySelector('.hdr')).getPropertyValue('-webkit-app-region'),
+    })`);
+    console.log('[smoke] window chrome:', frameCheck);
+    try {
+      const fc = JSON.parse(frameCheck);
+      if (!fc.min || !fc.max || !fc.close || fc.drag !== 'drag') {
+        console.error(`[smoke] FAILED: frameless chrome wrong: ${frameCheck}`);
+        process.exitCode = 1;
+      }
+    } catch { /* non-fatal */ }
+    console.log('[smoke] frameless    :', typeof win.isFrameless === 'function' ? win.isFrameless() : 'n/a');
+    const maxBefore = win.isMaximized();
+    await win.webContents.executeJavaScript("document.getElementById('btnMaximize').click()");
+    await new Promise((r) => setTimeout(r, 400));
+    const maxAfter = win.isMaximized();
+    await win.webContents.executeJavaScript("document.getElementById('btnMaximize').click()");
+    await new Promise((r) => setTimeout(r, 400));
+    const maxRestored = win.isMaximized();
+    console.log('[smoke] window max   :', JSON.stringify({ maxBefore, maxAfter, maxRestored }));
+    if (maxBefore === maxAfter || maxAfter === maxRestored) {
+      console.error('[smoke] FAILED: maximize/restore did not toggle the window state');
+      process.exitCode = 1;
+    }
+    win.unmaximize();
+    win.setSize(820, 1040);
+    await new Promise((r) => setTimeout(r, 300));
+    await win.webContents.executeJavaScript("document.getElementById('btnMinimize').click()");
+    await new Promise((r) => setTimeout(r, 400));
+    const minAfter = win.isMinimized();
+    console.log('[smoke] window min   :', JSON.stringify({ minAfter }));
+    win.restore();
+    await new Promise((r) => setTimeout(r, 300));
+
+    // Every tab must activate its own panel and only its own panel.
+    const tabCheck = await win.webContents.executeJavaScript(`(async () => {
+      const out = [];
+      for (const id of ['transcription','appearance','checkup','agents','about','engine']) {
+        document.getElementById('tab-' + id).click();
+        await new Promise((r) => setTimeout(r, 60));
+        const active = document.querySelector('.settings-tab.is-active')?.id || '';
+        const visible = [...document.querySelectorAll('.settings-panel')]
+          .filter((p) => !p.classList.contains('hidden')).map((p) => p.id);
+        const st = getComputedStyle(document.getElementById('tab-' + id));
+        out.push({ id, active, visible, outline: st.outlineStyle + ' ' + st.outlineWidth, borderRight: st.borderRightWidth, shadow: st.boxShadow });
+      }
+      return JSON.stringify(out);
+    })()`);
+    console.log('[smoke] settings tabs:', tabCheck);
+    try {
+      const tc = JSON.parse(tabCheck);
+      const ok = tc.length === 6 && tc.every((t) => t.active === `tab-${t.id}` && t.visible.length === 1 && t.visible[0] === `panel-${t.id}`);
+      if (!ok) {
+        console.error(`[smoke] FAILED: settings tab switching wrong: ${tabCheck}`);
+        process.exitCode = 1;
+      }
+    } catch { /* non-fatal */ }
+    await new Promise((r) => setTimeout(r, 400));
+    img = await win.webContents.capturePage();
+    const out2 = smokePath('_smoke_settings.png');
+    fs.writeFileSync(out2, img.toPNG());
+    // Artifact per tab: each panel must lay out without clipping or overflow.
+    for (const id of ['transcription', 'checkup', 'agents', 'about']) {
+      await win.webContents.executeJavaScript(`document.getElementById('tab-${id}').click()`);
+      await new Promise((r) => setTimeout(r, 250));
+      img = await win.webContents.capturePage();
+      fs.writeFileSync(smokePath(`_smoke_tab_${id}.png`), img.toPNG());
+    }
+    await win.webContents.executeJavaScript("document.getElementById('tab-engine').click()");
+    // Arrow keys move between tabs, as the tablist promises.
+    const arrowCheck = await win.webContents.executeJavaScript(`(async () => {
+      document.getElementById('tab-engine').focus();
+      const list = document.getElementById('tab-engine').parentElement;
+      list.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+      await new Promise((r) => setTimeout(r, 60));
+      const right = document.querySelector('.settings-tab.is-active')?.id || '';
+      list.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
+      await new Promise((r) => setTimeout(r, 60));
+      const left = document.querySelector('.settings-tab.is-active')?.id || '';
+      return JSON.stringify({ right, left });
+    })()`);
+    console.log('[smoke] arrow keys :', arrowCheck);
+    try {
+      const ac = JSON.parse(arrowCheck);
+      if (ac.right !== 'tab-transcription' || ac.left !== 'tab-engine') {
+        console.error(`[smoke] FAILED: arrow-key tab navigation wrong: ${arrowCheck}`);
+        process.exitCode = 1;
+      }
+    } catch { /* non-fatal */ }
+    // Escape closes the floating window and returns focus to the Settings button.
+    const escapeCheck = await win.webContents.executeJavaScript(`(async () => {
+      const btn = document.getElementById('btnSettings');
+      btn.focus();
+      btn.click();
+      await new Promise((r) => setTimeout(r, 300));
+      const opened = !document.getElementById('settingsDrawer').classList.contains('hidden');
+      document.getElementById('settingsWindow').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      await new Promise((r) => setTimeout(r, 300));
+      return JSON.stringify({
+        opened,
+        closed: document.getElementById('settingsDrawer').classList.contains('hidden'),
+        focus: document.activeElement?.id || '',
+      });
+    })()`);
+    console.log('[smoke] escape/focus:', escapeCheck);
+    try {
+      const ec = JSON.parse(escapeCheck);
+      if (!ec.opened || !ec.closed || ec.focus !== 'btnSettings') {
+        console.error(`[smoke] FAILED: Escape/focus return wrong: ${escapeCheck}`);
+        process.exitCode = 1;
+      }
+    } catch { /* non-fatal */ }
+    await win.webContents.executeJavaScript("document.getElementById('btnSettings').click()");
+    await new Promise((r) => setTimeout(r, 300));
+    // Sessions modal artifact: the library surface must lay out with words when empty.
+    await win.webContents.executeJavaScript("document.getElementById('btnSessions').click()");
+    await new Promise((r) => setTimeout(r, 500));
+    img = await win.webContents.capturePage();
+    fs.writeFileSync(smokePath('_smoke_sessions.png'), img.toPNG());
+    await win.webContents.executeJavaScript("document.getElementById('btnCloseSessions').click()");
+    await new Promise((r) => setTimeout(r, 300));
+    // End-session confirm artifact: danger styling, Cancel first, action-named button.
+    await win.webContents.executeJavaScript("document.getElementById('endConfirm').classList.remove('hidden')");
+    await new Promise((r) => setTimeout(r, 300));
+    img = await win.webContents.capturePage();
+    fs.writeFileSync(smokePath('_smoke_end.png'), img.toPNG());
+    await win.webContents.executeJavaScript("document.getElementById('endConfirm').classList.add('hidden')");
+
+    // 2.5) v1.8 appearance: Tech Moca is the only palette; dark/light persists.
+    const modeCheck = await win.webContents.executeJavaScript(`(async () => {
+      const tab = document.getElementById('tab-appearance');
+      if (!tab) return JSON.stringify({ fail: 'no appearance tab' });
+      tab.click();
+      await new Promise((r) => setTimeout(r, 120));
+      const light = [...document.querySelectorAll('#modeList .seg-btn')].find((b) => /light/i.test(b.textContent));
+      const dark = [...document.querySelectorAll('#modeList .seg-btn')].find((b) => /dark/i.test(b.textContent));
+      if (!light || !dark) return JSON.stringify({ fail: 'no mode control rendered' });
+      dark.click();                              // start from a known state
+      await new Promise((r) => setTimeout(r, 300));
+      light.click();
+      await new Promise((r) => setTimeout(r, 120));   // inside the 180 ms fade window
+      const html = document.documentElement;
+      const midAnim = html.classList.contains('mode-anim');
+      const bg = getComputedStyle(html).getPropertyValue('--tm-bg').trim();
+      const accent = getComputedStyle(html).getPropertyValue('--tm-accent').trim();
+      const theme = html.dataset.theme;
+      await new Promise((r) => setTimeout(r, 300));   // past the 180 ms cleanup
+      return JSON.stringify({ theme, mode: html.dataset.themeMode, midAnim, animCleared: !html.classList.contains('mode-anim'), bg, accent });
+    })()`);
+    console.log('[smoke] mode swap    :', modeCheck);
+    try {
+      const mc = JSON.parse(modeCheck);
+      if (mc.fail || mc.theme !== 'tech-moca' || mc.mode !== 'light' || !mc.midAnim || !mc.animCleared || !/^#ece9e2$/i.test(mc.bg)) {
+        console.error(`[smoke] FAILED: mode swap state wrong: ${modeCheck}`);
+        process.exitCode = 1;
+      }
+    } catch { /* non-fatal */ }
+    const modePersisted = (() => { try { return JSON.parse(fs.readFileSync(settings.file, 'utf8')).themeMode; } catch { return null; } })();
+    console.log('[smoke] mode persisted:', modePersisted);
+    if (modePersisted !== 'light') {
+      console.error('[smoke] FAILED: appearance mode not persisted to settings.json');
       process.exitCode = 1;
     }
     img = await win.webContents.capturePage();
-    fs.writeFileSync(smokePath('_smoke_theme.png'), img.toPNG());
-    // restore the default theme so the remaining artifact shots stay canonical
+    fs.writeFileSync(smokePath('_smoke_light.png'), img.toPNG());
+    // Main view in light mode, without the settings surface.
+    await win.webContents.executeJavaScript("document.getElementById('btnCloseSettings').click()");
+    await new Promise((r) => setTimeout(r, 400));
+    img = await win.webContents.capturePage();
+    fs.writeFileSync(smokePath('_smoke_light_main.png'), img.toPNG());
+    await win.webContents.executeJavaScript("document.getElementById('btnSettings').click()");
+    await new Promise((r) => setTimeout(r, 300));
+    // restore dark so the remaining artifact shots stay canonical
     await win.webContents.executeJavaScript(`(async () => {
-      const opt = document.querySelector('.theme-opt[data-id="default"]');
-      if (opt) { opt.click(); await new Promise((r) => setTimeout(r, 900)); }
+      const dark = [...document.querySelectorAll('#modeList .seg-btn')].find((b) => /dark/i.test(b.textContent));
+      if (dark) { dark.click(); await new Promise((r) => setTimeout(r, 300)); }
+      document.getElementById('tab-engine')?.click();
     })()`);
+
+    // 2.5b) v1.9 skins: chroma-only swap, persistence, both modes, restore Tech Moca.
+    const skinCheck = await win.webContents.executeJavaScript(`(async () => {
+      document.getElementById('tab-appearance')?.click();
+      await new Promise((r) => setTimeout(r, 120));
+      const rows = [...document.querySelectorAll('#skinList .skin-row')];
+      const midnight = rows.find((r) => r.dataset.skin === 'midnight');
+      const tech = rows.find((r) => r.dataset.skin === '');
+      if (!midnight || !tech) return JSON.stringify({ fail: 'skin rows missing', rows: rows.length });
+      midnight.click();
+      await new Promise((r) => setTimeout(r, 120));
+      const html = document.documentElement;
+      const midAnim = html.classList.contains('skin-anim');
+      const accent = getComputedStyle(html).getPropertyValue('--tm-accent').trim();
+      const skin = html.dataset.skin;
+      await new Promise((r) => setTimeout(r, 300));
+      const animCleared = !html.classList.contains('skin-anim');
+      return JSON.stringify({ rows: rows.length, skin, accent, midAnim, animCleared });
+    })()`);
+    console.log('[smoke] skin swap    :', skinCheck);
+    try {
+      const sc = JSON.parse(skinCheck);
+      if (sc.fail || sc.rows !== 12 || sc.skin !== 'midnight' || !/^#5aa9ff$/i.test(sc.accent) || !sc.midAnim || !sc.animCleared) {
+        console.error(`[smoke] FAILED: skin swap wrong: ${skinCheck}`);
+        process.exitCode = 1;
+      }
+    } catch { /* non-fatal */ }
+    const skinPersisted = (() => { try { return JSON.parse(fs.readFileSync(settings.file, 'utf8')).theme; } catch { return null; } })();
+    console.log('[smoke] skin persisted:', skinPersisted);
+    if (skinPersisted !== 'midnight') {
+      console.error('[smoke] FAILED: skin not persisted to settings.json');
+      process.exitCode = 1;
+    }
+    img = await win.webContents.capturePage();
+    fs.writeFileSync(smokePath('_smoke_skin_dark.png'), img.toPNG());
+
+    const skinLight = await win.webContents.executeJavaScript(`(async () => {
+      const light = [...document.querySelectorAll('#modeList .seg-btn')].find((b) => /light/i.test(b.textContent));
+      light.click();
+      await new Promise((r) => setTimeout(r, 300));
+      const html = document.documentElement;
+      return JSON.stringify({ skin: html.dataset.skin, mode: html.dataset.themeMode, accent: getComputedStyle(html).getPropertyValue('--tm-accent').trim() });
+    })()`);
+    console.log('[smoke] skin light   :', skinLight);
+    try {
+      const sl = JSON.parse(skinLight);
+      if (sl.skin !== 'midnight' || sl.mode !== 'light' || !/^#2563eb$/i.test(sl.accent)) {
+        console.error(`[smoke] FAILED: skin light mode wrong: ${skinLight}`);
+        process.exitCode = 1;
+      }
+    } catch { /* non-fatal */ }
+    img = await win.webContents.capturePage();
+    fs.writeFileSync(smokePath('_smoke_skin_light.png'), img.toPNG());
+
+    const skinRestore = await win.webContents.executeJavaScript(`(async () => {
+      const dark = [...document.querySelectorAll('#modeList .seg-btn')].find((b) => /dark/i.test(b.textContent));
+      dark.click();
+      await new Promise((r) => setTimeout(r, 300));
+      const tech = [...document.querySelectorAll('#skinList .skin-row')].find((r) => r.dataset.skin === '');
+      tech.click();
+      await new Promise((r) => setTimeout(r, 300));
+      const html = document.documentElement;
+      return JSON.stringify({ skin: html.dataset.skin, mode: html.dataset.themeMode, accent: getComputedStyle(html).getPropertyValue('--tm-accent').trim() });
+    })()`);
+    console.log('[smoke] skin restore :', skinRestore);
+    try {
+      const sr = JSON.parse(skinRestore);
+      if (sr.skin !== '' || sr.mode !== 'dark' || !/^#e6e3de$/i.test(sr.accent)) {
+        console.error(`[smoke] FAILED: skin restore wrong: ${skinRestore}`);
+        process.exitCode = 1;
+      }
+    } catch { /* non-fatal */ }
+    const skinRestored = (() => { try { return JSON.parse(fs.readFileSync(settings.file, 'utf8')).theme; } catch { return null; } })();
+    console.log('[smoke] skin restored:', skinRestored);
+    if (skinRestored !== '') {
+      console.error('[smoke] FAILED: Tech Moca skin not persisted');
+      process.exitCode = 1;
+    }
 
     // 2.6) About block: manual update check must give inline feedback (in dev the
     // feed is unconfigured, so the expected result is the portable/dev notice).
     const aboutCheck = await win.webContents.executeJavaScript(`(async () => {
+      document.getElementById('tab-about')?.click();
       const btn = document.getElementById('btnCheckUpdate');
       const res = document.getElementById('updateResult');
       if (!btn || !res) return JSON.stringify({ fail: 'about block missing' });
@@ -1063,6 +1337,7 @@ async function runSmoke() {
     // 2.7) v1.6.0 engine-first settings: #setEngine renders above #modelList, and the
     // model list is scoped to the engine (parakeet = exactly one row, nothing ggml).
     const engineCheck = await win.webContents.executeJavaScript(`(async () => {
+      document.getElementById('tab-engine')?.click();
       const eng = document.getElementById('setEngine');
       const ml = document.getElementById('modelList');
       if (!eng || !ml) return JSON.stringify({ fail: 'engine/model controls missing' });
@@ -1147,6 +1422,8 @@ async function runSmoke() {
       llmApiKey: settings.get('llmApiKey'),
       llmModel: settings.get('llmModel'),
       engine: engineAtStart,
+      theme: themeAtStart,
+      themeMode: themeModeAtStart,
       lastSessionParent: settings.get('lastSessionParent'),
     };
     settings.set({
@@ -1278,6 +1555,13 @@ async function runSmoke() {
       flip('setLlmCheckup', ${prevSettings.llmCheckup === true});
       flip('setLlmEndpoint', ${JSON.stringify(prevSettings.llmEndpoint || '')});
       flip('setLlmModel', ${JSON.stringify(prevSettings.llmModel || '')});
+      // Restore the user's real appearance through the pickers (their handlers persist).
+      const mode = ${JSON.stringify(prevSettings.themeMode || 'dark')};
+      const skin = ${JSON.stringify(prevSettings.theme === 'default' ? 'warm' : (prevSettings.theme || ''))};
+      const modeBtn = [...document.querySelectorAll('#modeList .seg-btn')].find((b) => b.textContent.toLowerCase() === mode);
+      if (modeBtn) { modeBtn.click(); await new Promise((r) => setTimeout(r, 300)); }
+      const skinRow = [...document.querySelectorAll('#skinList .skin-row')].find((r) => r.dataset.skin === skin);
+      if (skinRow) { skinRow.click(); await new Promise((r) => setTimeout(r, 300)); }
       // The engine is restored through the STORE, not the select: in dev an unprovisioned
       // parakeet makes the select's handler offer a 510 MB download instead of persisting.
     })()`);
@@ -1327,8 +1611,20 @@ async function runSmoke() {
         process.exitCode = 1;
       }
     } catch { /* non-fatal */ }
-    win.setSize(820, 700);
+    win.setSize(680, 880);
     await new Promise((r) => setTimeout(r, 1100));
+    // Minimum window size: no horizontal scroll anywhere.
+    const minGeom = await win.webContents.executeJavaScript(
+      'JSON.stringify({ vw: innerWidth, vh: innerHeight, docSw: document.documentElement.scrollWidth, bodySw: document.body.scrollWidth })',
+    );
+    console.log('[smoke] min window  :', minGeom);
+    try {
+      const mg = JSON.parse(minGeom);
+      if (mg.docSw > mg.vw || mg.bodySw > mg.vw) {
+        console.error(`[smoke] FAILED: horizontal scroll at the minimum window size: ${minGeom}`);
+        process.exitCode = 1;
+      }
+    } catch { /* non-fatal */ }
     img = await win.webContents.capturePage();
     const out3 = smokePath('_smoke_scroll.png');
     fs.writeFileSync(out3, img.toPNG());

@@ -1,0 +1,893 @@
+[
+  {
+    "id": "warm",
+    "name": "Susurro Warm",
+    "source": "Susurro Warm",
+    "note": "Warm taupe, sand, clay",
+    "swatch": [
+      "#D2A679",
+      "#C26B6B",
+      "#A3C49A"
+    ],
+    "dark": {
+      "accent": "#D2A679",
+      "accentStrong": "#dab691",
+      "accentInk": "#141414",
+      "focus": "#b5a68c",
+      "ok": "#A3C49A",
+      "okBg": "#252924",
+      "okLine": "#465243",
+      "warn": "#c9b07e",
+      "warnBg": "#2a2721",
+      "warnLine": "#534b39",
+      "error": "#c57272",
+      "errorBg": "#291f1f",
+      "errorLine": "#523535",
+      "errorStrong": "#ce8787",
+      "errorWash": "#372727",
+      "viz": [
+        "#D2A679",
+        "#A3C49A",
+        "#c57272",
+        "#bbb58a",
+        "#90877a",
+        "#cc8f76"
+      ],
+      "marks": [
+        "#D2A679",
+        "#A3C49A",
+        "#c57272",
+        "#bbb58a",
+        "#90877a",
+        "#cc8f76",
+        "#86868e",
+        "#e6e3de"
+      ]
+    },
+    "light": {
+      "accent": "#8c6039",
+      "accentStrong": "#734f2f",
+      "accentInk": "#f4f2ec",
+      "focus": "#6e6144",
+      "ok": "#3c6448",
+      "okBg": "#d7d9d0",
+      "okLine": "#aebaac",
+      "warn": "#745a20",
+      "warnBg": "#ded8cb",
+      "warnLine": "#c2b79e",
+      "error": "#ab2117",
+      "errorBg": "#e4d1ca",
+      "errorLine": "#d5a39b",
+      "errorStrong": "#911c14",
+      "errorWash": "#dfc1b9",
+      "viz": [
+        "#8c6039",
+        "#3c6448",
+        "#ab2117",
+        "#646241",
+        "#7e6449",
+        "#9a442a"
+      ],
+      "marks": [
+        "#8c6039",
+        "#3c6448",
+        "#ab2117",
+        "#646241",
+        "#7e6449",
+        "#9a442a",
+        "#6d6967",
+        "#201f1b"
+      ]
+    }
+  },
+  {
+    "id": "obsidian",
+    "name": "Obsidian",
+    "source": "Obsidian",
+    "note": "Neutral, zero hue",
+    "swatch": [
+      "#E4E4E7",
+      "#EF4444",
+      "#22C55E"
+    ],
+    "dark": {
+      "accent": "#E4E4E7",
+      "accentStrong": "#e9e9eb",
+      "accentInk": "#141414",
+      "focus": "#b5a68c",
+      "ok": "#22C55E",
+      "okBg": "#16291d",
+      "okLine": "#19522e",
+      "warn": "#c9b07e",
+      "warnBg": "#2a2721",
+      "warnLine": "#534b39",
+      "error": "#f04d4d",
+      "errorBg": "#2e1b1b",
+      "errorLine": "#612828",
+      "errorStrong": "#f26868",
+      "errorWash": "#401f1f",
+      "viz": [
+        "#E4E4E7",
+        "#22C55E",
+        "#f04d4d",
+        "#83d5a3",
+        "#828287",
+        "#e9a0a2"
+      ],
+      "marks": [
+        "#E4E4E7",
+        "#22C55E",
+        "#f04d4d",
+        "#83d5a3",
+        "#828287",
+        "#e9a0a2",
+        "#86868e",
+        "#e6e3de"
+      ]
+    },
+    "light": {
+      "accent": "#18181B",
+      "accentStrong": "#141416",
+      "accentInk": "#f4f2ec",
+      "focus": "#6e6144",
+      "ok": "#0e6a30",
+      "okBg": "#d1dacd",
+      "okLine": "#9ebda4",
+      "warn": "#745a20",
+      "warnBg": "#ded8cb",
+      "warnLine": "#c2b79e",
+      "error": "#b01e1e",
+      "errorBg": "#e5d1ca",
+      "errorLine": "#d7a29d",
+      "errorStrong": "#961a1a",
+      "errorWash": "#e0c0bb",
+      "viz": [
+        "#18181B",
+        "#0e6a30",
+        "#b01e1e",
+        "#134126",
+        "#6a6a6c",
+        "#5c1b1c"
+      ],
+      "marks": [
+        "#18181B",
+        "#0e6a30",
+        "#b01e1e",
+        "#134126",
+        "#6a6a6c",
+        "#5c1b1c",
+        "#69696f",
+        "#201f1b"
+      ]
+    }
+  },
+  {
+    "id": "midnight",
+    "name": "Midnight",
+    "source": "Midnight",
+    "note": "Deep studio blue",
+    "swatch": [
+      "#5AA9FF",
+      "#FF6B6B",
+      "#6FCF97"
+    ],
+    "dark": {
+      "accent": "#5AA9FF",
+      "accentStrong": "#78b8ff",
+      "accentInk": "#141414",
+      "focus": "#b5a68c",
+      "ok": "#6FCF97",
+      "okBg": "#1f2a24",
+      "okLine": "#345542",
+      "warn": "#c9b07e",
+      "warnBg": "#2a2721",
+      "warnLine": "#534b39",
+      "error": "#FF6B6B",
+      "errorBg": "#301e1e",
+      "errorLine": "#663232",
+      "errorStrong": "#ff8181",
+      "errorWash": "#432525",
+      "viz": [
+        "#5AA9FF",
+        "#6FCF97",
+        "#FF6B6B",
+        "#65bccb",
+        "#7b889e",
+        "#a48dbc"
+      ],
+      "marks": [
+        "#5AA9FF",
+        "#6FCF97",
+        "#FF6B6B",
+        "#65bccb",
+        "#7b889e",
+        "#a48dbc",
+        "#7487a0",
+        "#e6e3de"
+      ]
+    },
+    "light": {
+      "accent": "#2563EB",
+      "accentStrong": "#1e51c1",
+      "accentInk": "#f4f2ec",
+      "focus": "#6e6144",
+      "ok": "#116831",
+      "okBg": "#d2dacd",
+      "okLine": "#9fbca4",
+      "warn": "#745a20",
+      "warnBg": "#ded8cb",
+      "warnLine": "#c2b79e",
+      "error": "#b01e1e",
+      "errorBg": "#e5d1ca",
+      "errorLine": "#d7a29d",
+      "errorStrong": "#961a1a",
+      "errorWash": "#e0c0bb",
+      "viz": [
+        "#2563EB",
+        "#116831",
+        "#b01e1e",
+        "#1b668e",
+        "#3b6ea6",
+        "#64448f"
+      ],
+      "marks": [
+        "#2563EB",
+        "#116831",
+        "#b01e1e",
+        "#1b668e",
+        "#3b6ea6",
+        "#64448f",
+        "#5a687d",
+        "#201f1b"
+      ]
+    }
+  },
+  {
+    "id": "forest",
+    "name": "Forest",
+    "source": "Forest",
+    "note": "Organic greens",
+    "swatch": [
+      "#6FCF97",
+      "#E07A7A",
+      "#6FCF97"
+    ],
+    "dark": {
+      "accent": "#6FCF97",
+      "accentStrong": "#89d8aa",
+      "accentInk": "#141414",
+      "focus": "#b5a68c",
+      "ok": "#6FCF97",
+      "okBg": "#1f2a24",
+      "okLine": "#345542",
+      "warn": "#c9b07e",
+      "warnBg": "#2a2721",
+      "warnLine": "#534b39",
+      "error": "#E07A7A",
+      "errorBg": "#2c2020",
+      "errorLine": "#5b3838",
+      "errorStrong": "#e58e8e",
+      "errorWash": "#3d2828",
+      "viz": [
+        "#6FCF97",
+        "#6FCF97",
+        "#E07A7A",
+        "#6fcf97",
+        "#7f8b80",
+        "#a2a98a"
+      ],
+      "marks": [
+        "#6FCF97",
+        "#6FCF97",
+        "#E07A7A",
+        "#6fcf97",
+        "#7f8b80",
+        "#a2a98a",
+        "#738e78",
+        "#e6e3de"
+      ]
+    },
+    "light": {
+      "accent": "#2F7A48",
+      "accentStrong": "#27643b",
+      "accentInk": "#f4f2ec",
+      "focus": "#6e6144",
+      "ok": "#116831",
+      "okBg": "#d2dacd",
+      "okLine": "#9fbca4",
+      "warn": "#745a20",
+      "warnBg": "#ded8cb",
+      "warnLine": "#c2b79e",
+      "error": "#b01b1b",
+      "errorBg": "#e5d0ca",
+      "errorLine": "#d7a19c",
+      "errorStrong": "#961717",
+      "errorWash": "#e0c0ba",
+      "viz": [
+        "#2F7A48",
+        "#116831",
+        "#b01b1b",
+        "#20713d",
+        "#3d7253",
+        "#694f34"
+      ],
+      "marks": [
+        "#2F7A48",
+        "#116831",
+        "#b01b1b",
+        "#20713d",
+        "#3d7253",
+        "#694f34",
+        "#5a6f5e",
+        "#201f1b"
+      ]
+    }
+  },
+  {
+    "id": "nord",
+    "name": "Nord",
+    "source": "Nord",
+    "note": "Nordic minimal, ice blue",
+    "swatch": [
+      "#88C0D0",
+      "#BF616A",
+      "#A3BE8C"
+    ],
+    "dark": {
+      "accent": "#88C0D0",
+      "accentStrong": "#9dcbd8",
+      "accentInk": "#141414",
+      "focus": "#b5a68c",
+      "ok": "#A3BE8C",
+      "okBg": "#252822",
+      "okLine": "#46503e",
+      "warn": "#c9b07e",
+      "warnBg": "#2a2721",
+      "warnLine": "#534b39",
+      "error": "#c57179",
+      "errorBg": "#291f20",
+      "errorLine": "#523537",
+      "errorStrong": "#ce868d",
+      "errorWash": "#372728",
+      "viz": [
+        "#88C0D0",
+        "#A3BE8C",
+        "#c57179",
+        "#96bfae",
+        "#828997",
+        "#a39ca9"
+      ],
+      "marks": [
+        "#88C0D0",
+        "#A3BE8C",
+        "#c57179",
+        "#96bfae",
+        "#828997",
+        "#a39ca9",
+        "#7a8598",
+        "#e6e3de"
+      ]
+    },
+    "light": {
+      "accent": "#387483",
+      "accentStrong": "#2e5f6b",
+      "accentInk": "#f4f2ec",
+      "focus": "#6e6144",
+      "ok": "#3f6831",
+      "okBg": "#d7dacd",
+      "okLine": "#afbca4",
+      "warn": "#745a20",
+      "warnBg": "#ded8cb",
+      "warnLine": "#c2b79e",
+      "error": "#b01b1b",
+      "errorBg": "#e5d0ca",
+      "errorLine": "#d7a19c",
+      "errorStrong": "#961717",
+      "errorWash": "#e0c0ba",
+      "viz": [
+        "#387483",
+        "#3f6831",
+        "#b01b1b",
+        "#3c6e5a",
+        "#52737d",
+        "#6e4c54"
+      ],
+      "marks": [
+        "#387483",
+        "#3f6831",
+        "#b01b1b",
+        "#3c6e5a",
+        "#52737d",
+        "#6e4c54",
+        "#646b78",
+        "#201f1b"
+      ]
+    }
+  },
+  {
+    "id": "amethyst",
+    "name": "Amethyst",
+    "source": "Amethyst",
+    "note": "Soft purple haze",
+    "swatch": [
+      "#B18EFF",
+      "#FF7A8A",
+      "#8EC8A0"
+    ],
+    "dark": {
+      "accent": "#B18EFF",
+      "accentStrong": "#bfa2ff",
+      "accentInk": "#141414",
+      "focus": "#b5a68c",
+      "ok": "#8EC8A0",
+      "okBg": "#232a25",
+      "okLine": "#3f5345",
+      "warn": "#c9b07e",
+      "warnBg": "#2a2721",
+      "warnLine": "#534b39",
+      "error": "#FF7A8A",
+      "errorBg": "#302022",
+      "errorLine": "#66383d",
+      "errorStrong": "#ff8e9c",
+      "errorWash": "#43282c",
+      "viz": [
+        "#B18EFF",
+        "#8EC8A0",
+        "#FF7A8A",
+        "#a0abd0",
+        "#8c819c",
+        "#d485ca"
+      ],
+      "marks": [
+        "#B18EFF",
+        "#8EC8A0",
+        "#FF7A8A",
+        "#a0abd0",
+        "#8c819c",
+        "#d485ca",
+        "#8b7da0",
+        "#e6e3de"
+      ]
+    },
+    "light": {
+      "accent": "#6D28D9",
+      "accentStrong": "#5921b2",
+      "accentInk": "#f4f2ec",
+      "focus": "#6e6144",
+      "ok": "#116831",
+      "okBg": "#d2dacd",
+      "okLine": "#9fbca4",
+      "warn": "#745a20",
+      "warnBg": "#ded8cb",
+      "warnLine": "#c2b79e",
+      "error": "#b4173a",
+      "errorBg": "#e5d0ce",
+      "errorLine": "#d8a0a7",
+      "errorStrong": "#991431",
+      "errorWash": "#e1bfc0",
+      "viz": [
+        "#6D28D9",
+        "#116831",
+        "#b4173a",
+        "#3f4885",
+        "#735ca6",
+        "#8d2091"
+      ],
+      "marks": [
+        "#6D28D9",
+        "#116831",
+        "#b4173a",
+        "#3f4885",
+        "#735ca6",
+        "#8d2091",
+        "#6d647d",
+        "#201f1b"
+      ]
+    }
+  },
+  {
+    "id": "crimson",
+    "name": "Crimson",
+    "source": "Crimson",
+    "note": "Burnt reds, broadcast",
+    "swatch": [
+      "#FF6B6B",
+      "#FF4040",
+      "#F0B060"
+    ],
+    "dark": {
+      "accent": "#FF6B6B",
+      "accentStrong": "#ff8686",
+      "accentInk": "#141414",
+      "focus": "#b5a68c",
+      "ok": "#F0B060",
+      "okBg": "#2e271d",
+      "okLine": "#614b2f",
+      "warn": "#c9b07e",
+      "warnBg": "#2a2721",
+      "warnLine": "#534b39",
+      "error": "#FF4040",
+      "errorBg": "#301919",
+      "errorLine": "#662323",
+      "errorStrong": "#ff5d5d",
+      "errorWash": "#431d1d",
+      "viz": [
+        "#FF6B6B",
+        "#F0B060",
+        "#FF4040",
+        "#f88e66",
+        "#9c8686",
+        "#ff5858"
+      ],
+      "marks": [
+        "#FF6B6B",
+        "#F0B060",
+        "#FF4040",
+        "#f88e66",
+        "#9c8686",
+        "#ff5858",
+        "#a17b7b",
+        "#e6e3de"
+      ]
+    },
+    "light": {
+      "accent": "#C53030",
+      "accentStrong": "#a22727",
+      "accentInk": "#f4f2ec",
+      "focus": "#6e6144",
+      "ok": "#805516",
+      "okBg": "#dfd7ca",
+      "okLine": "#c6b59b",
+      "warn": "#745a20",
+      "warnBg": "#ded8cb",
+      "warnLine": "#c2b79e",
+      "error": "#b01e1e",
+      "errorBg": "#e5d1ca",
+      "errorLine": "#d7a29d",
+      "errorStrong": "#961a1a",
+      "errorWash": "#e0c0bb",
+      "viz": [
+        "#C53030",
+        "#805516",
+        "#b01e1e",
+        "#a34323",
+        "#b34b4b",
+        "#bc2828"
+      ],
+      "marks": [
+        "#C53030",
+        "#805516",
+        "#b01e1e",
+        "#a34323",
+        "#b34b4b",
+        "#bc2828",
+        "#866565",
+        "#201f1b"
+      ]
+    }
+  },
+  {
+    "id": "teal",
+    "name": "Deep Teal",
+    "source": "Deep Teal",
+    "note": "Aqua precision",
+    "swatch": [
+      "#4ECDC4",
+      "#FF7A7A",
+      "#4ECDC4"
+    ],
+    "dark": {
+      "accent": "#4ECDC4",
+      "accentStrong": "#6ed6cf",
+      "accentInk": "#141414",
+      "focus": "#b5a68c",
+      "ok": "#4ECDC4",
+      "okBg": "#1b2a29",
+      "okLine": "#285552",
+      "warn": "#c9b07e",
+      "warnBg": "#2a2721",
+      "warnLine": "#534b39",
+      "error": "#FF7A7A",
+      "errorBg": "#302020",
+      "errorLine": "#663838",
+      "errorStrong": "#ff8e8e",
+      "errorWash": "#432828",
+      "viz": [
+        "#4ECDC4",
+        "#4ECDC4",
+        "#FF7A7A",
+        "#4ecdc4",
+        "#6d8c8c",
+        "#9ea8a3"
+      ],
+      "marks": [
+        "#4ECDC4",
+        "#4ECDC4",
+        "#FF7A7A",
+        "#4ecdc4",
+        "#6d8c8c",
+        "#9ea8a3",
+        "#62908b",
+        "#e6e3de"
+      ]
+    },
+    "light": {
+      "accent": "#0F766E",
+      "accentStrong": "#0c615a",
+      "accentInk": "#f4f2ec",
+      "focus": "#6e6144",
+      "ok": "#0e6a63",
+      "okBg": "#d1dad3",
+      "okLine": "#9ebdb6",
+      "warn": "#745a20",
+      "warnBg": "#ded8cb",
+      "warnLine": "#c2b79e",
+      "error": "#b01e1e",
+      "errorBg": "#e5d1ca",
+      "errorLine": "#d7a29d",
+      "errorStrong": "#961a1a",
+      "errorWash": "#e0c0bb",
+      "viz": [
+        "#0F766E",
+        "#0e6a63",
+        "#b01e1e",
+        "#0f7069",
+        "#2b716c",
+        "#574e4a"
+      ],
+      "marks": [
+        "#0F766E",
+        "#0e6a63",
+        "#b01e1e",
+        "#0f7069",
+        "#2b716c",
+        "#574e4a",
+        "#4f726f",
+        "#201f1b"
+      ]
+    }
+  },
+  {
+    "id": "oled",
+    "name": "True Black",
+    "source": "True Black",
+    "note": "Pure black, maximum contrast",
+    "swatch": [
+      "#D2A679",
+      "#FF453A",
+      "#30D158"
+    ],
+    "dark": {
+      "accent": "#D2A679",
+      "accentStrong": "#dab691",
+      "accentInk": "#141414",
+      "focus": "#b5a68c",
+      "ok": "#30D158",
+      "okBg": "#172b1c",
+      "okLine": "#1e562c",
+      "warn": "#c9b07e",
+      "warnBg": "#2a2721",
+      "warnLine": "#534b39",
+      "error": "#FF453A",
+      "errorBg": "#301a19",
+      "errorLine": "#662521",
+      "errorStrong": "#ff6158",
+      "errorWash": "#431e1c",
+      "viz": [
+        "#D2A679",
+        "#30D158",
+        "#FF453A",
+        "#81bc69",
+        "#858585",
+        "#e67a5d"
+      ],
+      "marks": [
+        "#D2A679",
+        "#30D158",
+        "#FF453A",
+        "#81bc69",
+        "#858585",
+        "#e67a5d",
+        "#858585",
+        "#e6e3de"
+      ]
+    },
+    "light": {
+      "accent": "#8B5E34",
+      "accentStrong": "#724d2b",
+      "accentInk": "#f4f2ec",
+      "focus": "#6e6144",
+      "ok": "#106930",
+      "okBg": "#d2dacd",
+      "okLine": "#9fbca4",
+      "warn": "#745a20",
+      "warnBg": "#ded8cb",
+      "warnLine": "#c2b79e",
+      "error": "#aa2720",
+      "errorBg": "#e4d2cb",
+      "errorLine": "#d5a59e",
+      "errorStrong": "#91211b",
+      "errorWash": "#dfc2bb",
+      "viz": [
+        "#8B5E34",
+        "#106930",
+        "#aa2720",
+        "#4e6432",
+        "#7e6449",
+        "#99452b"
+      ],
+      "marks": [
+        "#8B5E34",
+        "#106930",
+        "#aa2720",
+        "#4e6432",
+        "#7e6449",
+        "#99452b",
+        "#686868",
+        "#201f1b"
+      ]
+    }
+  },
+  {
+    "id": "desert",
+    "name": "Desert",
+    "source": "Desert",
+    "note": "Warm stone and sand",
+    "swatch": [
+      "#E6C07A",
+      "#E07A5F",
+      "#81B29A"
+    ],
+    "dark": {
+      "accent": "#E6C07A",
+      "accentStrong": "#ebcb92",
+      "accentInk": "#141414",
+      "focus": "#b5a68c",
+      "ok": "#81B29A",
+      "okBg": "#212724",
+      "okLine": "#3a4b43",
+      "warn": "#c9b07e",
+      "warnBg": "#2a2721",
+      "warnLine": "#534b39",
+      "error": "#E07A5F",
+      "errorBg": "#2c201d",
+      "errorLine": "#5b382e",
+      "errorStrong": "#e58e77",
+      "errorWash": "#3d2823",
+      "viz": [
+        "#E6C07A",
+        "#81B29A",
+        "#E07A5F",
+        "#b4b98a",
+        "#89847e",
+        "#e3a16e"
+      ],
+      "marks": [
+        "#E6C07A",
+        "#81B29A",
+        "#E07A5F",
+        "#b4b98a",
+        "#89847e",
+        "#e3a16e",
+        "#8e8475",
+        "#e6e3de"
+      ]
+    },
+    "light": {
+      "accent": "#9C7A3A",
+      "accentStrong": "#947c4f",
+      "accentInk": "#141414",
+      "focus": "#6e6144",
+      "ok": "#3c6349",
+      "okBg": "#d7d9d0",
+      "okLine": "#aebaac",
+      "warn": "#745a20",
+      "warnBg": "#ded8cb",
+      "warnLine": "#c2b79e",
+      "error": "#a5370a",
+      "errorBg": "#e3d4c8",
+      "errorLine": "#d3ab96",
+      "errorStrong": "#af6d53",
+      "errorWash": "#dec5b7",
+      "viz": [
+        "#856831",
+        "#3c6349",
+        "#a5370a",
+        "#6c6f42",
+        "#7f6a43",
+        "#a05c24"
+      ],
+      "marks": [
+        "#856831",
+        "#3c6349",
+        "#a5370a",
+        "#6c6f42",
+        "#7f6a43",
+        "#a05c24",
+        "#766c5b",
+        "#201f1b"
+      ]
+    }
+  },
+  {
+    "id": "tokyo",
+    "name": "Tokyo Night",
+    "source": "Tokyo Night",
+    "note": "Blue-indigo, night-coded",
+    "swatch": [
+      "#7AA2F7",
+      "#F7768E",
+      "#9ECE6A"
+    ],
+    "dark": {
+      "accent": "#7AA2F7",
+      "accentStrong": "#92b3f8",
+      "accentInk": "#141414",
+      "focus": "#b5a68c",
+      "ok": "#9ECE6A",
+      "okBg": "#252a1e",
+      "okLine": "#445532",
+      "warn": "#c9b07e",
+      "warnBg": "#2a2721",
+      "warnLine": "#534b39",
+      "error": "#F7768E",
+      "errorBg": "#2f2023",
+      "errorLine": "#63363f",
+      "errorStrong": "#f88b9f",
+      "errorWash": "#41282c",
+      "viz": [
+        "#7AA2F7",
+        "#9ECE6A",
+        "#F7768E",
+        "#8cb8b1",
+        "#8087a7",
+        "#b28ec8"
+      ],
+      "marks": [
+        "#7AA2F7",
+        "#9ECE6A",
+        "#F7768E",
+        "#8cb8b1",
+        "#8087a7",
+        "#b28ec8",
+        "#81859c",
+        "#e6e3de"
+      ]
+    },
+    "light": {
+      "accent": "#3451B2",
+      "accentStrong": "#2b4292",
+      "accentInk": "#f4f2ec",
+      "focus": "#6e6144",
+      "ok": "#3f6824",
+      "okBg": "#d7dacb",
+      "okLine": "#afbca0",
+      "warn": "#745a20",
+      "warnBg": "#ded8cb",
+      "warnLine": "#c2b79e",
+      "error": "#a43838",
+      "errorBg": "#e3d4ce",
+      "errorLine": "#d3aba7",
+      "errorStrong": "#8b3030",
+      "errorWash": "#dec6c0",
+      "viz": [
+        "#3451B2",
+        "#3f6824",
+        "#a43838",
+        "#3a5d6b",
+        "#4f69a1",
+        "#66467b"
+      ],
+      "marks": [
+        "#3451B2",
+        "#3f6824",
+        "#a43838",
+        "#3a5d6b",
+        "#4f69a1",
+        "#66467b",
+        "#64687d",
+        "#201f1b"
+      ]
+    }
+  }
+]

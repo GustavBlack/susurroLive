@@ -1,6 +1,7 @@
-/* susurroLive — Warm Ink tokens
- * Derived from Warm-Ink-Style-Bible.html + Warm-Ink-Atari-Edition.html
- * See docs/warm-ink-tokens.md for roles and usage rules.
+/* susurroLive — ARCHIVED Warm Ink tokens (v1.5–v1.7).
+ * v1.8.0: NOT loaded by index.html. The app uses theme/tech-moca.css only.
+ * v1.9.0: kept with the archived themes; the skins derive from theme/themes.js.
+ * See docs/warm-ink-tokens.md and docs/v1.8.0-tech-moca-redesign.md.
  */
 
 :root {

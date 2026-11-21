@@ -1,7 +1,8 @@
 // app.js - susurroLive renderer (state + UI). Main owns truth; this is a projection.
 import { CaptureEngine, listMicrophones } from './audio.js';
 import { Visualizer } from './viz.js';
-import { initTheme, applyTheme, renderThemePicker } from './theme.js';
+import { initTheme, applyMode, applySkin, renderModePicker, renderSkinPicker } from './theme.js';
+import { normalizeSkin } from './theme/skins.js';
 
 const api = window.susurro;
 
@@ -59,6 +60,29 @@ const el = (tag, cls, text) => {
   return n;
 };
 
+/** Every gap has words: a short title and one sentence on what to do. */
+function emptyState(title, text) {
+  const n = el('div', 'empty');
+  n.appendChild(el('div', 'empty-title', title));
+  n.appendChild(el('div', null, text));
+  return n;
+}
+
+/** Keep Tab inside a modal while it is open. */
+function trapFocus(container) {
+  container.addEventListener('keydown', (e) => {
+    if (e.key !== 'Tab') return;
+    const focusable = [...container.querySelectorAll(
+      'button, input, select, textarea, [tabindex]:not([tabindex="-1"])',
+    )].filter((n) => !n.disabled && n.offsetParent !== null);
+    if (!focusable.length) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  });
+}
+
 function capturePcm(ab) {
   if (!S.recording || S.paused) return;
   S.recordedSeconds += ab.byteLength / (2 * engine.sampleRate);
@@ -98,7 +122,7 @@ function renderSources() {
     const row = el('div', 'src-row' + (s.muted ? ' muted' : ''));
     row.dataset.id = s.id;
 
-    row.appendChild(el('div', 'src-icon', s.kind === 'mic' ? '🎙' : '🔊'));
+    row.appendChild(el('div', 'src-icon', s.kind === 'mic' ? 'MIC' : 'SYS'));
 
     const nameCell = el('div');
     if (s.kind === 'mic' && S.mics.length > 0) {
@@ -123,7 +147,7 @@ function renderSources() {
     meter.appendChild(fill);
     row.appendChild(meter);
 
-    const btnMute = el('button', 'src-btn' + (s.muted ? ' on' : ''), s.muted ? 'muted' : 'mute');
+    const btnMute = el('button', 'src-btn' + (s.muted ? ' on' : ''), s.muted ? 'Unmute' : 'Mute');
     btnMute.onclick = () => { s.muted = !s.muted; engine.setMute(s.id, s.muted); renderSources(); };
     row.appendChild(btnMute);
 
@@ -152,7 +176,7 @@ function renderLegend() {
   for (const s of S.sources) {
     const d = el('div');
     const sw = el('span', 'sw');
-    sw.style.background = s.muted ? '#726b68' : '#c99a6b';
+    sw.style.background = s.muted ? 'var(--tm-viz-other)' : 'var(--tm-viz-1)';
     d.appendChild(sw);
     d.appendChild(el('span', null, s.label));
     lg.appendChild(d);
@@ -189,7 +213,7 @@ let endConfirmOpen = false;
 function setEndConfirm(open) {
   endConfirmOpen = open;
   $('endConfirm').classList.toggle('hidden', !open);
-  if (open) $('btnConfirmEnd').focus();
+  if (open) $('btnCancelEnd').focus();
   else if ($('endConfirm').contains(document.activeElement)) $('btnRecord').focus();
 }
 function requestEndSession() {
@@ -416,7 +440,7 @@ function renderTranscript() {
   if (!S.words.length) {
     if (!(S.chunks || []).some((c) => c.status !== 'done')) {
       resetTranscript();
-      box.appendChild(el('div', 'empty', 'Transcription appears here as chunks complete.'));
+      box.appendChild(emptyState('No transcript yet', 'Words appear here as each chunk finishes.'));
       return;
     }
   }
@@ -648,8 +672,8 @@ function renderSpeakers() {
   btn.classList.toggle('busy', S.diarizing);
   btn.textContent = S.diarizing
     ? `Identifying… ${fmtClock((Date.now() - (S.diarStartedAt || Date.now())) / 1000)}  ✕`
-    : n ? '↻ Speakers' : '◐ Identify speakers';
-  btn.title = S.diarizing ? 'Identifying who spoke when — click to cancel'
+    : n ? 'Identify again' : 'Identify speakers';
+  btn.title = S.diarizing ? 'Identifying who spoke when · click to cancel'
     : blocked ? 'Available once transcription has finished'
       : n ? 'Run speaker identification again' : 'Identify who spoke when';
 
@@ -725,9 +749,9 @@ function renderCheckupUI() {
   const prog = S.checkupProgress;
   btn.textContent = S.checkupRunning
     ? (prog && prog.total > 1 ? `Processing… ${prog.done}/${prog.total}` : 'Processing…')
-    : '✦ AI checkup';
+    : 'AI checkup';
   btn.title = S.checkupRunning
-    ? 'The transcript is being checked — you can keep working'
+    ? 'The transcript is being checked · you can keep working'
     : 'Send the transcript to your AI endpoint for a correction pass';
 
   const ck = S.session?.checkup;
@@ -743,7 +767,7 @@ function renderCheckupUI() {
   // one-time hint when drifted chunks appear (re-transcribed after the checkup ran)
   if (S.driftedChunkIds.length && !S.driftToastShown) {
     S.driftToastShown = true;
-    showToast('chunk re-transcribed since checkup — run the checkup again to refresh corrections');
+    showToast('chunk re-transcribed since checkup · run the checkup again to refresh corrections');
   }
 }
 
@@ -842,8 +866,8 @@ function renderVocab() {
   if (!box) return;
   box.innerHTML = '';
   const profs = vocabProfiles();
-  if (!S.vocab) box.appendChild(el('div', 'empty', 'vocabulary.json unavailable in this build.'));
-  else if (!profs.length) box.appendChild(el('div', 'empty', 'No profiles yet — add one below.'));
+  if (!S.vocab) box.appendChild(emptyState('Vocabulary unavailable', 'vocabulary.json is not available in this build.'));
+  else if (!profs.length) box.appendChild(emptyState('No profiles yet', 'Add a profile below to inject terms into the checkup prompt.'));
   if (!S.vocabSel && profs.length) S.vocabSel = profs[0].id;
   for (const p of profs) {
     const row = el('div', 'vocab-row' + (p.id === S.vocabSel ? ' sel' : ''));
@@ -1024,14 +1048,19 @@ async function onSessionChanged() {
   setStatus('Idle', 'idle');
 }
 
+let sessionsReturnFocus = null;
 function closeSessions() {
   $('sessionModal').classList.add('hidden');
   $('btnNewSession').classList.remove('cta');
+  if (sessionsReturnFocus && typeof sessionsReturnFocus.focus === 'function') sessionsReturnFocus.focus();
+  sessionsReturnFocus = null;
 }
 
 async function openSessions(opts = {}) {
+  sessionsReturnFocus = document.activeElement;
   if (opts.highlight) $('btnNewSession').classList.add('cta');
   $('sessionModal').classList.remove('hidden');
+  $('btnNewSession').focus();
   await refreshSessionList();
 }
 
@@ -1039,11 +1068,12 @@ async function refreshSessionList() {
   const list = $('sessionList');
   list.innerHTML = '';
   const parent = S.settings?.lastSessionParent;
-  if (!parent) { list.appendChild(el('div', 'empty', 'No session folder chosen yet — click "New session…".')); return; }
+  if (!parent) { list.appendChild(emptyState('No session folder', 'Choose a folder with New session… to start the library.')); return; }
   const sessions = await api.session.list(parent);
-  if (!sessions.length) { list.appendChild(el('div', 'empty', `No sessions in ${parent}`)); return; }
+  if (!sessions.length) { list.appendChild(emptyState('No sessions here', `Nothing in ${parent} yet. Create a session or import media.`)); return; }
   for (const s of sessions) {
-    const item = el('div', 'sess-item');
+    const item = el('button', 'sess-item');
+    item.type = 'button';
     item.appendChild(el('div', 't', s.name || '(untitled)'));
     item.appendChild(el('div', 'm', `${s.folder}  ·  ${fmtClock(s.durationSec)}  ·  ${s.transcribed}/${s.chunks} chunks`));
     item.onclick = async () => {
@@ -1114,33 +1144,95 @@ async function importMedia() {
   await refreshSession();
   S.activeWord = -1;
   setStatus('Processing', 'processing');
-  showToast(`imported ${base} · ${fmtClock(res.seconds)} · ${res.chunks} chunks — transcribing`);
+  showToast(`imported ${base} · ${fmtClock(res.seconds)} · ${res.chunks} chunks · transcribing`);
 }
 
 // ---------------------------------------------------------------- settings
-/** v1.5 theme picker: re-renders after each pick so the `on` state follows. */
-function renderTheme() {
-  renderThemePicker($('themeList'), {
-    theme: S.settings.theme || 'default',
-    themeMode: S.settings.themeMode || 'dark',
-    onPick: async (id) => {
-      S.settings = await api.settings.set({ theme: id });
-      applyTheme(S.settings.theme, S.settings.themeMode, viz);
-      renderTheme();
-    },
+// v1.8: a floating window with tabs. Every control keeps its original id and
+// IPC path; only the surface and the grouping changed.
+const SETTINGS_TABS = ['engine', 'transcription', 'appearance', 'checkup', 'agents', 'about'];
+let settingsTab = 'engine';
+let settingsReturnFocus = null;
+
+/** Appearance: dark / light only. The archived themes return as skins in Phase II. */
+function renderAppearance() {
+  renderModePicker($('modeList'), {
+    mode: S.settings.themeMode || 'dark',
     onMode: async (m) => {
       S.settings = await api.settings.set({ themeMode: m });
-      applyTheme(S.settings.theme, S.settings.themeMode, viz);
-      renderTheme();
+      applyMode(S.settings.themeMode, { viz });
+      renderAppearance();
+    },
+  });
+  renderSkinPicker($('skinList'), {
+    skin: S.settings.theme || '',
+    onSkin: async (skin) => {
+      S.settings = await api.settings.set({ theme: skin });
+      applySkin(S.settings.theme, { viz });
+      renderAppearance();
     },
   });
 }
 
+function activateSettingsTab(id, { focus = false } = {}) {
+  if (!SETTINGS_TABS.includes(id)) id = 'engine';
+  settingsTab = id;
+  for (const t of SETTINGS_TABS) {
+    const tab = $(`tab-${t}`);
+    const panel = $(`panel-${t}`);
+    const on = t === id;
+    tab.classList.toggle('is-active', on);
+    tab.setAttribute('aria-selected', on ? 'true' : 'false');
+    tab.tabIndex = on ? 0 : -1;
+    panel.classList.toggle('hidden', !on);
+  }
+  if (focus) $(`tab-${id}`).focus();
+}
+
 function openSettings() {
+  settingsReturnFocus = document.activeElement;
   $('settingsDrawer').classList.remove('hidden');
+  activateSettingsTab(settingsTab);
+  renderAppearance();
   renderDiag();
-  refreshVocab();   // re-read on every drawer open: the file is user-owned
+  refreshVocab();   // re-read on every open: the file is user-owned
   refreshMcpStatus();
+  $(`tab-${settingsTab}`).focus();
+}
+
+function closeSettings() {
+  $('settingsDrawer').classList.add('hidden');
+  if (settingsReturnFocus && typeof settingsReturnFocus.focus === 'function') settingsReturnFocus.focus();
+  settingsReturnFocus = null;
+}
+
+function wireSettingsTabs() {
+  for (const t of SETTINGS_TABS) {
+    $(`tab-${t}`).onclick = () => activateSettingsTab(t, { focus: true });
+  }
+  $('tab-engine').parentElement.addEventListener('keydown', (e) => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
+    const i = SETTINGS_TABS.indexOf(settingsTab);
+    let next = i;
+    if (e.key === 'ArrowLeft') next = (i - 1 + SETTINGS_TABS.length) % SETTINGS_TABS.length;
+    else if (e.key === 'ArrowRight') next = (i + 1) % SETTINGS_TABS.length;
+    else if (e.key === 'Home') next = 0;
+    else if (e.key === 'End') next = SETTINGS_TABS.length - 1;
+    e.preventDefault();
+    activateSettingsTab(SETTINGS_TABS[next], { focus: true });
+  });
+  // Keep Tab inside the floating window while it is open.
+  $('settingsWindow').addEventListener('keydown', (e) => {
+    if (e.key !== 'Tab') return;
+    const focusable = [...$('settingsWindow').querySelectorAll(
+      'button, input, select, textarea, [tabindex]:not([tabindex="-1"])',
+    )].filter((n) => !n.disabled && n.offsetParent !== null);
+    if (!focusable.length) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  });
 }
 
 function renderMcpStatus(st) {
@@ -1157,7 +1249,7 @@ function renderMcpStatus(st) {
     status.classList.toggle('bad', on && !st.running);
   }
   const url = $('mcpEndpoint');
-  if (url) url.textContent = st.url || '—';
+  if (url) url.textContent = st.url || '-';
 }
 
 async function refreshMcpStatus() {
@@ -1179,12 +1271,12 @@ function renderDiag() {
     `whisper    ${e.binary || 'not found'}`,
     `whisperCUDA ${e.binaryCuda ? 'yes' : 'no'}`,
     `models     ${(e.models || []).map((m) => `${m.id} (${m.mb}MB)`).join(', ') || 'none'}`,
-    `parakeet   ${pk.available ? (pk.model || 'available') : `unavailable — ${pk.reason || 'not provisioned'}`}`,
+    `parakeet   ${pk.available ? (pk.model || 'available') : `unavailable · ${pk.reason || 'not provisioned'}`}`,
     `mode       ${e.available ? 'LIVE transcription' : 'DEMO (placeholder words)'}`,
     `reason     ${e.reason || '-'}`,
     `diarizer   ${S.diar?.binary || 'not found'}`,
     `diar model ${S.diar?.model || 'none'}`,
-    `speakers   ${S.diar?.available ? 'available' : `unavailable — ${S.diar?.reason || '?'}`}`,
+    `speakers   ${S.diar?.available ? 'available' : `unavailable · ${S.diar?.reason || '?'}`}`,
     ``,
     `bin dir    ${S.paths?.bin}`,
     `model dir  ${S.paths?.models}`,
@@ -1225,7 +1317,7 @@ async function renderModels() {
       nameLine.appendChild(el('span', null, name));
       nameLine.appendChild(el('span', 'badge active', 'in use'));
       main.appendChild(nameLine);
-      main.appendChild(el('div', 'model-note', 'parakeet (sherpa-onnx) is the active engine — whisper models below are not used.'));
+      main.appendChild(el('div', 'model-note', 'parakeet (sherpa-onnx) is the active engine · whisper models below are not used.'));
       row.appendChild(main);
       box.appendChild(row);
     } else {
@@ -1251,7 +1343,7 @@ async function renderModels() {
   try { catalog = await api.models.catalog(); } catch { /* leave empty */ }
   S.catalog = catalog;
   box.innerHTML = '';
-  if (!catalog.length) { box.appendChild(el('div', 'empty', 'No models available.')); return; }
+  if (!catalog.length) { box.appendChild(emptyState('No models available', 'Check the engine status in About, then reopen this tab.')); return; }
 
   const activeId = S.settings?.model || 'small.en';
 
@@ -1275,13 +1367,13 @@ async function renderModels() {
     if (m.downloading) {
       const pct = el('span', 'model-pct', '0%');
       actions.appendChild(pct);
-      const b = el('button', 'src-btn', 'cancel');
+      const b = el('button', 'src-btn', 'Cancel');
       b.onclick = async () => { await api.models.cancel(m.id); await renderModels(); };
       actions.appendChild(b);
       row._pct = pct;
     } else if (m.installed) {
       if (m.id !== activeId) {
-        const use = el('button', 'src-btn', 'use');
+        const use = el('button', 'src-btn', 'Use');
         use.onclick = () => useModel(m.id);
         actions.appendChild(use);
       }
@@ -1290,7 +1382,7 @@ async function renderModels() {
       del.onclick = () => removeModel(m.id, activeId);
       actions.appendChild(del);
     } else {
-      const b = el('button', 'src-btn', `download ${fmtSize(m.mb * 1e6)}`);
+      const b = el('button', 'src-btn', `Download ${fmtSize(m.mb * 1e6)}`);
       b.onclick = () => downloadModel(m.id);
       actions.appendChild(b);
     }
@@ -1358,8 +1450,18 @@ async function downloadParakeet() {
 // ---------------------------------------------------------------- banners / status
 function setStatus(text, cls) {
   const p = $('statusPill');
-  p.textContent = text;
   p.className = `pill pill-${cls}`;
+  p.innerHTML = '';
+  const dot = el('span', 'pill-dot');
+  dot.setAttribute('aria-hidden', 'true');
+  p.appendChild(dot);
+  p.appendChild(el('span', 'pill-word', text));
+  // The beacon marks a live session; it is the one sanctioned motion exception.
+  if (cls === 'recording' || cls === 'processing') {
+    const beacon = el('span', 'pill-beacon');
+    beacon.setAttribute('aria-hidden', 'true');
+    p.appendChild(beacon);
+  }
   $('vizState').textContent = text;
 }
 
@@ -1374,7 +1476,7 @@ function renderUpdatePill(u) {
     return;
   }
   if (u.available && !u.downloading) {
-    pill.textContent = `update ${u.info?.version || ''} — download`;
+    pill.textContent = `Update ${u.info?.version || ''} · download`;
     pill.className = 'pill pill-attention';
     pill.onclick = () => api.update.download();
     return;
@@ -1404,13 +1506,13 @@ function initAboutBlock() {
     const show = (text, cls = '') => { res.className = `about-result ${cls}`; res.textContent = text; };
     const st = S.update || {};
     if (!st.feedConfigured) {
-      show('No update feed in this build (dev run or portable exe) — grab the latest release from GitHub.', 'err');
+      show('No update feed in this build (dev run or portable exe) · grab the latest release from GitHub.', 'err');
     } else {
       show('Checking for updates…');
       const r = await api.update.check().catch((e) => ({ ok: false, error: e.message }));
       const u = await api.update.status().catch(() => S.update || {});
       if (!r.ok) show(`Couldn't check: ${r.error || 'unknown error'}`, 'err');
-      else if (u.available) show(`Update ${u.info?.version || ''} available — use the header pill to download.`, 'ok');
+      else if (u.available) show(`Update ${u.info?.version || ''} available · use the header pill to download.`, 'ok');
       else show(`You're up to date (v${S.appVersion}).`, 'ok');
     }
     btn.disabled = false;
@@ -1434,18 +1536,18 @@ function renderBanner() {
   if (!e) return;
   if (!e.available) {
     b.className = 'banner warn demo';
-    b.textContent = `DEMO MODE — ${e.reason} Add whisper-cli.exe + a ggml model to native/ and relaunch.`;
+    b.textContent = `DEMO MODE · ${e.reason} Add whisper-cli.exe + a ggml model to native/ and relaunch.`;
     b.classList.remove('hidden');
     return;
   }
   if (!e.gpu?.accelerated) {
     b.className = 'banner warn';
-    b.textContent = `CPU transcription — ${e.gpu?.reason || ''} Everything works, just slower.`;
+    b.textContent = `CPU transcription · ${e.gpu?.reason || ''} Everything works, just slower.`;
     b.classList.remove('hidden');
     return;
   }
   b.className = 'banner ok';
-  b.textContent = `GPU accelerated — ${e.gpu.model} via whisper.cpp CUDA. Model: ${e.models?.[0]?.id || '?'}`;
+  b.textContent = `GPU accelerated · ${e.gpu.model} via whisper.cpp CUDA. Model: ${e.models?.[0]?.id || '?'}`;
   b.classList.remove('hidden');
 }
 
@@ -1477,12 +1579,37 @@ function loop() {
 }
 
 // ---------------------------------------------------------------- wiring
+function wireWindowControls() {
+  const min = $('btnMinimize');
+  const max = $('btnMaximize');
+  const close = $('btnCloseWindow');
+  if (!min || !max || !close) return;
+
+  min.onclick = () => api.window?.minimize?.();
+  max.onclick = () => api.window?.toggleMaximize?.();
+  close.onclick = () => api.window?.close?.();
+
+  const setMax = (on) => {
+    max.textContent = on ? '❐' : '□';
+    max.setAttribute('aria-label', on ? 'Restore' : 'Maximize');
+    max.title = on ? 'Restore' : 'Maximize';
+    max.dataset.maximized = on ? 'true' : 'false';
+  };
+  api.window?.isMaximized?.().then(setMax).catch(() => {});
+  api.window?.onState?.((s) => setMax(!!s?.maximized));
+}
+
 function wire() {
   $('btnRecord').onclick = onRecordButton;
   $('btnEndSession').onclick = requestEndSession;
   $('btnConfirmEnd').onclick = confirmEndSession;
   $('btnCancelEnd').onclick = cancelEndSession;
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') cancelEndSession(); });
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    if (!$('endConfirm').classList.contains('hidden')) cancelEndSession();
+    else if (!$('settingsDrawer').classList.contains('hidden')) closeSettings();
+    else if (!$('sessionModal').classList.contains('hidden')) closeSessions();
+  });
   $('btnAddMic').onclick = addMic;
   $('btnAddSys').onclick = addSystem;
 
@@ -1496,7 +1623,8 @@ function wire() {
   };
 
   $('btnSettings').onclick = openSettings;
-  $('btnCloseSettings').onclick = () => $('settingsDrawer').classList.add('hidden');
+  $('btnCloseSettings').onclick = closeSettings;
+  $('btnDoneSettings').onclick = closeSettings;
   $('setMcpEnabled').onchange = async () => {
     S.settings = await api.settings.set({ mcpEnabled: $('setMcpEnabled').checked });
     await refreshMcpStatus();
@@ -1512,7 +1640,11 @@ function wire() {
     else { showToast('MCP token rotated'); await refreshMcpStatus(); }
   };
   $('btnMcpReveal').onclick = () => { api.mcp?.reveal?.(); };
-  renderTheme();
+  renderAppearance();
+  wireSettingsTabs();
+  wireWindowControls();
+  trapFocus($('sessionModal'));
+  trapFocus($('endConfirm'));
   $('btnSessions').onclick = openSessions;
   $('btnCloseSessions').onclick = closeSessions;
   $('btnNewSession').onclick = newSession;
@@ -1827,8 +1959,13 @@ async function boot() {
   $('setLlmContext').value = String(S.settings.llmContextTokens || 8192);
   $('setLlmThinking').value = S.settings.llmThinking || 'auto';
   refreshVocab();
-  // v1.5: apply the persisted theme BEFORE first paint of dependent UI, no animation.
-  initTheme(S.settings.theme, S.settings.themeMode, viz);
+  // v1.9: Tech Moca is the base; an old theme id migrates to its skin, unknown ids fall back.
+  const skin = normalizeSkin(S.settings.theme);
+  if (skin !== (S.settings.theme || '')) {
+    S.settings.theme = skin;
+    api.settings.set({ theme: skin });
+  }
+  initTheme(S.settings.themeMode, viz, skin);
   try { S.diar = await api.diarize.status(); } catch { S.diar = null; }
   await renderModels();
   if (S.settings.lastSessionParent) {

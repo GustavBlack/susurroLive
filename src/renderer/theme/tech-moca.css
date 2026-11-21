@@ -1,0 +1,249 @@
+/* ==========================================================================
+   susurroLive — TECH MOCA design tokens (v1.8.0, base for v1.9.0 skins)
+   Graphite console, greige ink, condensed chrome. Design: Gustav Rlo.
+   Source: D:\ONI_Harness\docs\design\tech-moca\AGENT-BRIEF.md + STYLE-GUIDE.md
+
+   This is the base palette. The 11 archived themes live in theme/themes.js and
+   return as chroma-only skins in theme/skins.css (v1.9.0); a skin overrides only
+   the accent, focus, status, viz and mark tokens.
+
+   Dark is the default. Light is opt-in with <html data-theme-mode="light">.
+   ========================================================================== */
+
+:root,
+[data-theme-mode="dark"] {
+  color-scheme: dark;
+
+  /* ---- Surfaces: one neutral charcoal; panels lift by a single shade ---- */
+  --tm-bg: #141414;
+  --tm-bg-alt: #171717;
+  --tm-bg-raised: #1b1b1b;
+  --tm-bg-sunken: #101010;
+  --tm-bg-hover: #232323;
+  --tm-accent-wash: #262626;
+
+  /* ---- Lines: hairlines only ---- */
+  --tm-line: #2c2c2c;
+  --tm-line-soft: #222222;
+  --tm-line-hover: #5f5c57;
+
+  /* ---- Text ---- */
+  --tm-text: #e6e3de;
+  --tm-text-dim: #9b978f;
+  --tm-text-faint: #6f6b64;
+  --tm-text-disabled: #4a4741;
+
+  /* ---- Accent: light and neutral, never a hue ---- */
+  --tm-accent: #e6e3de;
+  --tm-accent-strong: #ffffff;
+  --tm-accent-ink: #141414;
+
+  /* ---- Focus: a quiet sand — the only trace of warmth ---- */
+  --tm-focus: #b5a68c;
+  --tm-selection: rgba(181, 166, 140, 0.28);
+
+  /* ---- Status: desaturated, each with a tinted well ---- */
+  --tm-ok: #8db592;    --tm-ok-bg: #171e18;    --tm-ok-line: #2e4232;
+  --tm-warn: #c9b07e;  --tm-warn-bg: #1f1c15;  --tm-warn-line: #463d2a;
+  --tm-error: #c9827a; --tm-error-bg: #211716; --tm-error-line: #482c29;
+  --tm-error-strong: #d99189;
+
+  --tm-dot-ok: #5f7a63;
+  --tm-dot-error: #8a524c;
+  --tm-dot-pending: #85795f;
+
+  /* ---- Data visualisation: ordered series, then neutral for "other" ---- */
+  --tm-viz-1: #b5a68c;
+  --tm-viz-2: #8db592;
+  --tm-viz-3: #c9827a;
+  --tm-viz-4: #8fa6b5;
+  --tm-viz-5: #d9894a;
+  --tm-viz-6: #a99bb0;
+  --tm-viz-other: #6f6b64;
+  --tm-viz-grid: #222222;
+  --tm-viz-axis: #2c2c2c;
+
+  /* ---- Session marks: the eight labels a user gives a session.
+          A mark is a label, never a status and never a chart series. ---- */
+  --tm-mark-sand: hsl(48 46% 66%);
+  --tm-mark-sage: hsl(92 46% 56%);
+  --tm-mark-brick: hsl(2 50% 60%);
+  --tm-mark-slate: hsl(160 38% 54%);
+  --tm-mark-clay: var(--tm-viz-5);
+  --tm-mark-heather: hsl(282 42% 67%);
+  --tm-mark-stone: hsl(334 46% 70%);
+  --tm-mark-ink: var(--tm-text);
+
+  /* ---- Depth: only things that float cast a shadow ---- */
+  --tm-shadow-float: 0 12px 32px rgba(0, 0, 0, 0.50);
+  --tm-shadow-modal: 0 18px 48px rgba(0, 0, 0, 0.50);
+  --tm-backdrop: rgba(0, 0, 0, 0.60);
+}
+
+/* ---- Type, shape, space, motion: identical in both modes ---- */
+:root {
+  --tm-font-display: "Saira Condensed", "Bahnschrift SemiCondensed", "Arial Narrow", "Segoe UI", sans-serif;
+  --tm-font-body: "Inter", "Inter Variable", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --tm-font-mono: "JetBrains Mono", "JetBrains Mono Variable", "Cascadia Mono", Consolas, ui-monospace, monospace;
+
+  --tm-fs-micro: 10px;
+  --tm-fs-label: 10.5px;
+  --tm-fs-meta: 11px;
+  --tm-fs-small: 12px;
+  --tm-fs-body: 13px;
+  --tm-fs-doc: 14.5px;
+  --tm-fs-lede: 16px;
+  --tm-fs-read: 17px;
+  --tm-fs-tab: 14px;
+  --tm-fs-d5: 17px;
+  --tm-fs-d4: 21px;
+  --tm-fs-d3: 23px;
+  --tm-fs-d2: 32px;
+  --tm-fs-d1: 46px;
+
+  --tm-lh-tight: 1.15;
+  --tm-lh-ui: 1.45;
+  --tm-lh-doc: 1.6;
+  --tm-lh-read: 1.65;
+
+  --tm-track-caps: 0.06em;
+  --tm-track-label: 0.08em;
+  --tm-track-eyebrow: 0.12em;
+
+  --tm-s2: 2px;  --tm-s4: 4px;  --tm-s6: 6px;  --tm-s8: 8px;
+  --tm-s10: 10px; --tm-s12: 12px; --tm-s14: 14px; --tm-s16: 16px;
+  --tm-s20: 20px; --tm-s24: 24px; --tm-s28: 28px; --tm-s32: 32px;
+  --tm-s40: 40px; --tm-s44: 44px;
+
+  --tm-r-xs: 4px;
+  --tm-r-sm: 6px;
+  --tm-r: 8px;
+  --tm-r-card: 10px;
+  --tm-r-lg: 12px;
+  --tm-r-pill: 999px;
+
+  --tm-t-fast: 120ms;
+  --tm-t-switch: 140ms;
+  --tm-t-fade: 160ms;
+  --tm-ease: ease;
+
+  /* The beacon: one live session, the one sanctioned motion exception. */
+  --tm-beacon-ripple-size: 8px;
+  --tm-beacon-ripple-line: 1.5px;
+  --tm-beacon-ripple-from: 0.7;
+  --tm-beacon-ripple-scale: 2.6;
+  --tm-beacon-ripple-end: 70%;
+  --tm-beacon-ripple-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --tm-t-beacon-rest: 2.6s;
+  --tm-t-beacon-work: 1.6s;
+
+  --tm-topbar-h: 40px;
+  --tm-rail-w: 260px;
+  --tm-inspector-w: 340px;
+  --tm-measure: 70ch;
+}
+
+/* ---- Light: greige paper, ink chrome, tan focus ---- */
+[data-theme-mode="light"] {
+  color-scheme: light;
+
+  --tm-bg: #ece9e2;
+  --tm-bg-alt: #e4e1d9;
+  --tm-bg-raised: #f4f2ec;
+  --tm-bg-sunken: #e2dfd7;
+  --tm-bg-hover: #e6e3db;
+  --tm-accent-wash: #dedad1;
+
+  --tm-line: #c6c1b5;
+  --tm-line-soft: #d8d4ca;
+  --tm-line-hover: #a8a295;
+
+  --tm-text: #201f1b;
+  --tm-text-dim: #55524c;
+  --tm-text-faint: #837f77;
+  --tm-text-disabled: #b0aca2;
+
+  --tm-accent: #201f1b;
+  --tm-accent-strong: #000000;
+  --tm-accent-ink: #f4f2ec;
+
+  --tm-focus: #6e6144;
+  --tm-selection: rgba(110, 97, 68, 0.22);
+
+  --tm-ok: #3f6b47;    --tm-ok-bg: #e1e7dc;    --tm-ok-line: #b5c7b1;
+  --tm-warn: #7a5f22;  --tm-warn-bg: #ede4cf;  --tm-warn-line: #d2bf94;
+  --tm-error: #984a42; --tm-error-bg: #f1e0dc; --tm-error-line: #dbb2ab;
+  --tm-error-strong: #7f3c35;
+
+  --tm-dot-ok: #6f9a76;
+  --tm-dot-error: #b06a62;
+  --tm-dot-pending: #a8996f;
+
+  --tm-viz-1: #6e6144;
+  --tm-viz-2: #3f6b47;
+  --tm-viz-3: #984a42;
+  --tm-viz-4: #4f6577;
+  --tm-viz-5: #9c5220;
+  --tm-viz-6: #6b5a78;
+  --tm-viz-other: #837f77;
+  --tm-viz-grid: #d8d4ca;
+  --tm-viz-axis: #c6c1b5;
+
+  --tm-mark-sand: hsl(46 50% 31%);
+  --tm-mark-sage: hsl(98 44% 31%);
+  --tm-mark-brick: hsl(356 50% 40%);
+  --tm-mark-slate: hsl(164 46% 27%);
+  --tm-mark-heather: hsl(282 40% 41%);
+  --tm-mark-stone: hsl(334 46% 44%);
+
+  --tm-shadow-float: 0 12px 32px rgba(58, 52, 40, 0.18);
+  --tm-shadow-modal: 0 18px 48px rgba(58, 52, 40, 0.22);
+  --tm-backdrop: rgba(32, 31, 27, 0.38);
+}
+
+/* ---- Legacy aliases: kept so older selectors and any future skin layer
+        keep resolving. New code uses --tm-* directly. ---- */
+:root {
+  --bg: var(--tm-bg);
+  --surface: var(--tm-bg-raised);
+  --surface-hi: var(--tm-bg-hover);
+  --border: var(--tm-line);
+  --text: var(--tm-text);
+  --text-dim: var(--tm-text-dim);
+  --accent: var(--tm-accent);
+  --accent-strong: var(--tm-accent-strong);
+  --muted: var(--tm-text-faint);
+  --muted-2: var(--tm-text-dim);
+  --paper: var(--tm-text);
+  --paper-hi: var(--tm-text);
+  --paper-2: var(--tm-text);
+  --ink-000: var(--tm-bg-sunken);
+  --ink-050: var(--tm-bg);
+  --ink-100: var(--tm-bg-alt);
+  --ink-150: var(--tm-bg-raised);
+  --ink-200: var(--tm-bg-hover);
+  --ink-250: var(--tm-bg-raised);
+  --ink-300: var(--tm-bg-hover);
+  --ink-line: var(--tm-line);
+  --font-ui: var(--tm-font-body);
+  --font-mono: var(--tm-font-mono);
+  --r-card: var(--tm-r-card);
+  --r-ctrl: var(--tm-r);
+  --r-pill: var(--tm-r-pill);
+  --ease-out: var(--tm-ease);
+  --t-fast: var(--tm-t-fast);
+  --t-med: var(--tm-t-fade);
+}
+
+::selection {
+  background: var(--tm-selection);
+  color: var(--tm-text);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --tm-t-fast: 0ms;
+    --tm-t-switch: 0ms;
+    --tm-t-fade: 0ms;
+  }
+}

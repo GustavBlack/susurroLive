@@ -1,48 +1,58 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="tech-moca" data-theme-mode="dark">
 <head>
 <meta charset="utf-8" />
 <meta http-equiv="Content-Security-Policy"
       content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; media-src 'self' file: blob:; img-src 'self' data: blob:; connect-src 'self' file: data: blob:;" />
 <title>susurroLive</title>
-<link rel="stylesheet" href="theme/tokens.css" />
-<link rel="stylesheet" href="theme/themes.css" />
+<link rel="stylesheet" href="fonts/fonts.css" />
+<link rel="stylesheet" href="theme/tech-moca.css" />
+<link rel="stylesheet" href="theme/skins.css" />
 <link rel="stylesheet" href="style.css" />
 </head>
 <body>
 <div id="app">
 
-  <!-- ===================================================== header -->
+  <!-- ===================================================== top bar -->
   <header class="hdr">
     <div class="brand">
-      <span class="dot"></span>
-      <span class="brand-name">susurro<b>Live</b></span>
+      <img class="brand-mark" src="assets/icon-32.png" alt="" aria-hidden="true" />
+      <span class="brand-name">Susurro<em>Live</em></span>
     </div>
-    <input id="sessionName" class="session-name" value="Untitled Session" spellcheck="false" />
+    <div class="session-block">
+      <label class="tm-label" for="sessionName">Session</label>
+      <input id="sessionName" class="session-name" value="Untitled Session" spellcheck="false" />
+    </div>
     <div class="hdr-right">
-      <span id="statusPill" class="pill pill-idle" role="status">Idle</span>
-      <button id="btnSessions" class="icon-btn" title="Sessions">▤</button>
-      <button id="btnSettings" class="icon-btn" title="Settings">⚙</button>
+      <span id="statusPill" class="pill pill-idle" role="status"><span class="pill-dot" aria-hidden="true"></span><span class="pill-word">Idle</span></span>
+      <button id="btnSessions" class="icon-btn" title="Sessions" aria-label="Sessions">▤</button>
+      <button id="btnSettings" class="icon-btn" title="Settings" aria-label="Settings">⚙</button>
+      <div class="win-controls" aria-label="Window controls">
+        <button id="btnMinimize" class="icon-btn win-btn" type="button" title="Minimize" aria-label="Minimize">–</button>
+        <button id="btnMaximize" class="icon-btn win-btn" type="button" title="Maximize" aria-label="Maximize">□</button>
+        <button id="btnCloseWindow" class="icon-btn win-btn win-close" type="button" title="Close" aria-label="Close">✕</button>
+      </div>
     </div>
   </header>
 
   <!-- ===================================================== engine banner -->
-  <div id="banner" class="banner hidden"></div>
+  <div id="banner" class="banner hidden" role="status"></div>
 
   <!-- ===================================================== transport -->
   <section class="transport">
     <button id="btnRecord" class="rec" title="Start recording" aria-label="Start recording">
-      <span class="rec-inner" aria-hidden="true"></span>
-      <span class="rec-label" aria-hidden="true">Pause</span>
+      <span class="rec-glyph" aria-hidden="true"></span>
+      <span class="rec-label" aria-hidden="true">Record</span>
     </button>
-    <button id="btnEndSession" class="btn btn-end hidden" title="End session and finalize transcription">END SESSION</button>
+    <button id="btnEndSession" class="btn btn-danger-outline hidden" title="End session and finalize transcription">End session</button>
     <div class="transport-mid">
+      <div class="tm-label">Elapsed</div>
       <div id="timer" class="timer">00:00</div>
       <div id="recSub" class="rec-sub">not recording</div>
     </div>
     <div class="transport-right">
       <label class="field">
-        <span>chunk</span>
+        <span class="tm-label">Chunk</span>
         <select id="chunkSec">
           <option value="15">15s</option>
           <option value="30">30s</option>
@@ -50,7 +60,7 @@
           <option value="120">120s</option>
         </select>
       </label>
-      <button id="btnFolder" class="btn">📁 Session folder…</button>
+      <button id="btnFolder" class="btn">Session folder…</button>
       <div id="folderPath" class="folder-path">no folder chosen</div>
     </div>
   </section>
@@ -61,44 +71,59 @@
       <!-- sources -->
       <section class="panel">
         <div class="panel-head">
-          <h2>Sources</h2>
+          <div class="panel-title">
+            <div class="tm-eyebrow">Input</div>
+            <h2>Sources</h2>
+          </div>
           <div class="panel-actions">
-            <button id="btnAddMic" class="btn btn-sm">＋ Microphone</button>
-            <button id="btnAddSys" class="btn btn-sm">＋ System Audio</button>
+            <button id="btnAddMic" class="btn btn-sm">Add microphone</button>
+            <button id="btnAddSys" class="btn btn-sm">Add system audio</button>
           </div>
         </div>
         <div id="sourceList" class="source-list"></div>
-        <div id="sourceEmpty" class="empty">No sources yet — add a microphone or system audio.</div>
+        <div id="sourceEmpty" class="empty">
+          <div class="empty-title">No sources</div>
+          <div>Add a microphone or system audio to build the mix.</div>
+        </div>
       </section>
 
       <!-- transcript -->
       <section class="panel panel-grow">
         <div class="panel-head">
-          <h2>Transcript</h2>
+          <div class="panel-title">
+            <div class="tm-eyebrow">Output</div>
+            <h2>Transcript</h2>
+          </div>
           <div class="panel-actions">
-            <button id="btnDiarize" class="btn btn-sm hidden" title="Identify who spoke when">◐ Identify speakers</button>
+            <button id="btnDiarize" class="btn btn-sm hidden" title="Identify who spoke when">Identify speakers</button>
             <span id="ckSeg" class="seg hidden">
-              <button id="ckViewChecked" class="btn btn-sm" title="Show the checked-up transcript">Checked</button>
-              <button id="ckViewOriginal" class="btn btn-sm" title="Show the original transcript">Original</button>
+              <button id="ckViewChecked" class="seg-btn" title="Show the checked-up transcript">Checked</button>
+              <button id="ckViewOriginal" class="seg-btn" title="Show the original transcript">Original</button>
             </span>
-            <button id="btnAiCheckup" class="btn btn-sm llm-checkup hidden" title="Run the AI transcript checkup">✦ AI checkup</button>
+            <button id="btnAiCheckup" class="btn btn-sm llm-checkup hidden" title="Run the AI transcript checkup">AI checkup</button>
             <button id="btnCkDiscard" class="btn btn-sm hidden" title="Remove all AI corrections from this session">Discard corrections</button>
-            <button id="btnFollow" class="btn btn-sm hidden">⤓ follow</button>
-            <button id="btnPlay" class="btn btn-sm" disabled>▶ Play</button>
-            <button id="btnStopPlay" class="btn btn-sm" disabled>■</button>
+            <button id="btnFollow" class="btn btn-sm hidden">Follow</button>
+            <button id="btnPlay" class="btn btn-sm" disabled>Play</button>
+            <button id="btnStopPlay" class="btn btn-sm" disabled aria-label="Stop playback">■</button>
             <span id="playTime" class="mono muted-sm">00:00.0 / 00:00.0</span>
           </div>
         </div>
         <div id="spkLegend" class="spk-legend hidden" aria-label="Speakers"></div>
         <div id="transcript" class="transcript">
-          <div class="empty">Transcription appears here as chunks complete.</div>
+          <div class="empty">
+            <div class="empty-title">No transcript yet</div>
+            <div>Words appear here as each chunk finishes.</div>
+          </div>
         </div>
         <audio id="player" preload="metadata"></audio>
       </section>
     </div>
 
     <div class="col-right">
-      <div id="vizState" class="viz-head">Ready</div>
+      <div class="viz-head">
+        <div class="tm-eyebrow">Live</div>
+        <div id="vizState" class="viz-state">Ready</div>
+      </div>
       <canvas id="viz" width="260" height="640" aria-hidden="true"></canvas>
       <div id="vizLegend" class="viz-legend"></div>
     </div>
@@ -106,7 +131,7 @@
 
   <!-- ===================================================== pipeline strip -->
   <section class="pipeline">
-    <div class="pipe-label">CHUNKS</div>
+    <div class="pipe-label">Chunks</div>
     <div id="chunkStrip" class="chunk-strip"></div>
     <div id="pipeStatus" class="pipe-status mono">0 queued</div>
     <button id="btnRetryAll" class="btn btn-sm hidden">Retry failed</button>
@@ -114,160 +139,221 @@
 
   <!-- ===================================================== export -->
   <footer class="exportbar">
-    <span class="pipe-label">EXPORT</span>
-    <button class="btn btn-sm" data-export="txt">clean .txt</button>
-    <button class="btn btn-sm" data-export="json">timecoded .json</button>
-    <button class="btn btn-sm" data-export="audio">audio .wav</button>
+    <span class="pipe-label">Export</span>
+    <button class="btn btn-sm" data-export="txt">Clean .txt</button>
+    <button class="btn btn-sm" data-export="json">Timecoded .json</button>
+    <button class="btn btn-sm" data-export="audio">Audio .wav</button>
     <span id="exportMsg" class="mono muted-sm"></span>
-    <button id="btnExportFolder" class="btn btn-sm" title="Open this session's exports folder">open folder</button>
+    <button id="btnExportFolder" class="btn btn-sm" title="Open this session's exports folder">Open folder</button>
   </footer>
 
   <!-- ===================================================== toast -->
-  <div id="toast" class="toast hidden"></div>
+  <div id="toast" class="toast hidden" role="status"></div>
 
-  <!-- ===================================================== settings drawer -->
-  <aside id="settingsDrawer" class="drawer hidden">
-    <div class="drawer-head">
-      <h2>Settings</h2>
-      <span id="updatePill" class="pill hidden"></span>
-      <button id="btnCloseSettings" class="icon-btn">✕</button>
-    </div>
-    <div class="drawer-body">
-      <div class="field-block">
-        <div class="field-label">Theme</div>
-        <div id="themeList"></div>
-      </div>
-      <label class="field wide">
-        <span>Engine</span>
-        <select id="setEngine">
-          <option value="whisper">whisper.cpp</option>
-          <option value="parakeet">parakeet — fast, 25 languages</option>
-        </select>
-        <span class="hint">models below are filtered to the selected engine</span>
-      </label>
-      <div class="field-block">
-        <div class="field-label">Model</div>
-        <div id="modelList" class="model-list"></div>
-      </div>
-      <label class="field wide">
-        <span>Language</span>
-        <select id="setLang">
-          <option value="en">en — English</option>
-          <option value="auto">auto — detect</option>
-        </select>
-      </label>
-      <label class="field wide">
-        <span>Device</span>
-        <select id="setDevice">
-          <option value="auto">auto</option>
-          <option value="cuda">GPU (CUDA)</option>
-          <option value="cpu">CPU</option>
-        </select>
-      </label>
-      <label class="field wide">
-        <span>Chunk window (s)</span>
-        <select id="setChunk">
-          <option value="15">15</option>
-          <option value="30">30</option>
-          <option value="60">60</option>
-          <option value="120">120</option>
-        </select>
-      </label>
-      <label class="row-check">
-        <input type="checkbox" id="setVad" checked /> <span>VAD — skip silence</span>
-      </label>
-      <label class="row-check">
-        <input type="checkbox" id="setDiarAuto" /> <span>Identify speakers automatically after transcription</span>
-      </label>
-
-      <div class="field-block" id="llmCheckupBlock">
-        <div class="field-label">AI transcript checkup</div>
-        <label class="row-check">
-          <input type="checkbox" id="setLlmCheckup" /> <span>Enable the AI checkup feature</span>
-        </label>
-        <label class="field wide">
-          <span>Endpoint (OpenAI-style /v1 base)</span>
-          <input id="setLlmEndpoint" placeholder="http://127.0.0.1:1234/v1" spellcheck="false" />
-        </label>
-        <label class="field wide">
-          <span>API key (empty = endpoint needs none)</span>
-          <input id="setLlmApiKey" type="password" autocomplete="off" spellcheck="false" />
-        </label>
-        <label class="field wide">
-          <span>Model</span>
-          <input id="setLlmModel" list="llmModelOptions" spellcheck="false" placeholder="model id at the endpoint" />
-        </label>
-        <datalist id="llmModelOptions"></datalist>
-        <div class="llm-row">
-          <label class="field">
-            <span>Context tokens</span>
-            <input id="setLlmContext" type="number" min="1024" step="256" />
-          </label>
-          <button id="btnLlmProbe" class="btn btn-sm">List models</button>
+  <!-- ===================================================== settings: floating window -->
+  <div id="settingsDrawer" class="settings-backdrop hidden">
+    <section id="settingsWindow" class="settings-win" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+      <header class="settings-head">
+        <div class="settings-head-title">
+          <div class="tm-eyebrow">Preferences</div>
+          <h2 id="settingsTitle">Settings</h2>
         </div>
-        <label class="field wide">
-          <span>Thinking mode</span>
-          <select id="setLlmThinking">
-            <option value="auto">auto — strip think blocks</option>
-            <option value="off">off — take content as-is</option>
-          </select>
-        </label>
-        <div class="field-block" id="llmVocabBlock">
-          <div class="field-label">Vocabulary</div>
-          <div id="vocabProfiles"></div>
-          <div class="llm-row">
-            <input id="vocabNewName" placeholder="new profile name" spellcheck="false" />
-            <button id="btnVocabAdd" class="btn btn-sm">add profile</button>
-            <button id="btnVocabReveal" class="btn btn-sm" title="Open vocabulary.json in the file manager">Show file…</button>
+        <span id="updatePill" class="pill hidden"></span>
+        <button id="btnCloseSettings" class="icon-btn" title="Close settings" aria-label="Close settings">✕</button>
+      </header>
+
+      <div class="settings-tabs" role="tablist" aria-label="Settings sections">
+        <button id="tab-engine" class="settings-tab is-active" role="tab" aria-selected="true" aria-controls="panel-engine" tabindex="0">Engine</button>
+        <button id="tab-transcription" class="settings-tab" role="tab" aria-selected="false" aria-controls="panel-transcription" tabindex="-1">Transcription</button>
+        <button id="tab-appearance" class="settings-tab" role="tab" aria-selected="false" aria-controls="panel-appearance" tabindex="-1">Appearance</button>
+        <button id="tab-checkup" class="settings-tab" role="tab" aria-selected="false" aria-controls="panel-checkup" tabindex="-1">AI checkup</button>
+        <button id="tab-agents" class="settings-tab" role="tab" aria-selected="false" aria-controls="panel-agents" tabindex="-1">Agents</button>
+        <button id="tab-about" class="settings-tab is-quiet" role="tab" aria-selected="false" aria-controls="panel-about" tabindex="-1">About</button>
+      </div>
+
+      <div class="settings-body">
+        <!-- ---------------------------------------------- engine -->
+        <section id="panel-engine" class="settings-panel" role="tabpanel" aria-labelledby="tab-engine">
+          <div class="group">
+            <div class="group-title">Recognition</div>
+            <label class="field wide">
+              <span>Engine</span>
+              <select id="setEngine">
+                <option value="whisper">whisper.cpp</option>
+                <option value="parakeet">parakeet · fast, English</option>
+              </select>
+            </label>
+            <div class="hint">Models below are filtered to the selected engine.</div>
           </div>
-          <textarea id="vocabTerms" rows="5" spellcheck="false" placeholder="one term per line — injected into the checkup prompt"></textarea>
-        </div>
-        <div class="hint">Runs only when you click the checkup button; sends the transcript to the endpoint above. Nothing is sent automatically.</div>
+          <div class="group">
+            <div class="group-title">Model</div>
+            <div id="modelList" class="model-list"></div>
+          </div>
+        </section>
+
+        <!-- ---------------------------------------------- transcription -->
+        <section id="panel-transcription" class="settings-panel hidden" role="tabpanel" aria-labelledby="tab-transcription">
+          <div class="group">
+            <div class="group-title">Recognition</div>
+            <label class="field wide">
+              <span>Language</span>
+              <select id="setLang">
+                <option value="en">en · English</option>
+                <option value="auto">auto · detect</option>
+              </select>
+            </label>
+            <label class="field wide">
+              <span>Device</span>
+              <select id="setDevice">
+                <option value="auto">auto</option>
+                <option value="cuda">GPU (CUDA)</option>
+                <option value="cpu">CPU</option>
+              </select>
+            </label>
+          </div>
+          <div class="group">
+            <div class="group-title">Capture</div>
+            <label class="field wide">
+              <span>Chunk window</span>
+              <select id="setChunk">
+                <option value="15">15 s</option>
+                <option value="30">30 s</option>
+                <option value="60">60 s</option>
+                <option value="120">120 s</option>
+              </select>
+            </label>
+            <label class="row-check">
+              <input type="checkbox" id="setVad" checked /> <span>VAD · skip silence</span>
+            </label>
+            <label class="row-check">
+              <input type="checkbox" id="setDiarAuto" /> <span>Identify speakers automatically after transcription</span>
+            </label>
+          </div>
+        </section>
+
+        <!-- ---------------------------------------------- appearance -->
+        <section id="panel-appearance" class="settings-panel hidden" role="tabpanel" aria-labelledby="tab-appearance">
+          <div class="group">
+            <div class="group-title">Mode</div>
+            <div id="modeList"></div>
+            <div class="hint">Dark is the default. Light uses greige paper with ink chrome.</div>
+          </div>
+          <div class="group">
+            <div class="group-title">Skin</div>
+            <div id="skinList" class="skin-list" role="radiogroup" aria-label="Colour skin"></div>
+            <div class="hint">A skin retints accent, status and chart colours. The layout stays Tech Moca.</div>
+          </div>
+        </section>
+
+        <!-- ---------------------------------------------- AI checkup -->
+        <section id="panel-checkup" class="settings-panel hidden" role="tabpanel" aria-labelledby="tab-checkup">
+          <div class="group" id="llmCheckupBlock">
+            <div class="group-title">AI transcript checkup</div>
+            <label class="row-check">
+              <input type="checkbox" id="setLlmCheckup" /> <span>Enable the AI checkup feature</span>
+            </label>
+            <label class="field wide">
+              <span>Endpoint</span>
+              <input id="setLlmEndpoint" placeholder="http://127.0.0.1:1234/v1" spellcheck="false" />
+            </label>
+            <div class="hint">OpenAI-style /v1 base. Empty means the endpoint needs no key.</div>
+            <label class="field wide">
+              <span>API key</span>
+              <input id="setLlmApiKey" type="password" autocomplete="off" spellcheck="false" placeholder="empty = no key" />
+            </label>
+            <label class="field wide">
+              <span>Model</span>
+              <input id="setLlmModel" list="llmModelOptions" spellcheck="false" placeholder="model id at the endpoint" />
+            </label>
+            <datalist id="llmModelOptions"></datalist>
+            <div class="inline-row">
+              <label class="field">
+                <span>Context tokens</span>
+                <input id="setLlmContext" type="number" min="1024" step="256" />
+              </label>
+              <button id="btnLlmProbe" class="btn btn-sm">List models</button>
+            </div>
+            <label class="field wide">
+              <span>Thinking mode</span>
+              <select id="setLlmThinking">
+                <option value="auto">auto · strip think blocks</option>
+                <option value="off">off · take content as-is</option>
+              </select>
+            </label>
+            <div class="hint">Runs only when you click the checkup button. Nothing is sent automatically.</div>
+          </div>
+          <div class="group" id="llmVocabBlock">
+            <div class="group-title">Vocabulary</div>
+            <div id="vocabProfiles"></div>
+            <div class="inline-row">
+              <input id="vocabNewName" placeholder="new profile name" spellcheck="false" />
+              <button id="btnVocabAdd" class="btn btn-sm">Add profile</button>
+              <button id="btnVocabReveal" class="btn btn-sm" title="Open vocabulary.json in the file manager">Show file…</button>
+            </div>
+            <textarea id="vocabTerms" rows="5" spellcheck="false" placeholder="one term per line, injected into the checkup prompt"></textarea>
+          </div>
+        </section>
+
+        <!-- ---------------------------------------------- agents -->
+        <section id="panel-agents" class="settings-panel hidden" role="tabpanel" aria-labelledby="tab-agents">
+          <div class="group" id="mcpBlock">
+            <div class="group-title">Agents (MCP)</div>
+            <label class="row-check">
+              <input type="checkbox" id="setMcpEnabled" checked /> <span>Allow local agents to control susurroLive</span>
+            </label>
+            <div class="inline-row">
+              <span id="mcpStatus" class="mcp-status">Off</span>
+              <span id="mcpEndpoint" class="mcp-endpoint">-</span>
+            </div>
+            <div class="inline-row">
+              <button id="btnMcpCopy" class="btn btn-sm">Copy Hermes config</button>
+              <button id="btnMcpRotate" class="btn btn-sm">Rotate token</button>
+              <button id="btnMcpReveal" class="btn btn-sm">Show mcp.json</button>
+            </div>
+            <div class="hint">Local only (127.0.0.1) with a bearer token. Agents can start and stop recordings and read transcripts. Disable to revoke.</div>
+          </div>
+        </section>
+
+        <!-- ---------------------------------------------- about -->
+        <section id="panel-about" class="settings-panel hidden" role="tabpanel" aria-labelledby="tab-about">
+          <div class="group" id="aboutBlock">
+            <div class="group-title">About</div>
+            <div class="about-row">
+              <span id="aboutVersion" class="about-version"></span>
+              <button id="btnCheckUpdate" class="btn btn-sm">Check for updates</button>
+            </div>
+            <div id="updateResult" class="about-result hidden"></div>
+          </div>
+          <div class="group">
+            <div class="group-title">Diagnostics</div>
+            <pre class="diag" id="diag"></pre>
+          </div>
+        </section>
       </div>
 
-      <div class="field-block" id="mcpBlock">
-        <div class="field-label">Agents (MCP)</div>
-        <label class="row-check">
-          <input type="checkbox" id="setMcpEnabled" checked /> <span>Allow local agents to control susurroLive</span>
-        </label>
-        <div class="llm-row">
-          <span id="mcpStatus" class="mcp-status">Off</span>
-          <span id="mcpEndpoint" class="mcp-endpoint">—</span>
-        </div>
-        <div class="llm-row">
-          <button id="btnMcpCopy" class="btn btn-sm">Copy Hermes config</button>
-          <button id="btnMcpRotate" class="btn btn-sm">Rotate token</button>
-          <button id="btnMcpReveal" class="btn btn-sm">Show mcp.json</button>
-        </div>
-        <div class="hint">Local only (127.0.0.1) with a bearer token. Agents can start/stop recordings and read transcripts. Disable to revoke.</div>
-      </div>
-
-      <div class="field-block" id="aboutBlock">
-        <div class="field-label">About</div>
-        <div class="about-row">
-          <span id="aboutVersion" class="about-version"></span>
-          <button id="btnCheckUpdate" class="btn btn-sm">Check for updates</button>
-        </div>
-        <div id="updateResult" class="about-result hidden"></div>
-      </div>
-
-      <div class="diag" id="diag"></div>
-    </div>
-  </aside>
+      <footer class="settings-foot">
+        <span class="settings-meta">Changes apply immediately.</span>
+        <button id="btnDoneSettings" class="btn btn-primary">Done</button>
+      </footer>
+    </section>
+  </div>
 
   <!-- ===================================================== session browser -->
   <div id="sessionModal" class="modal hidden">
     <div class="modal-card">
-      <div class="drawer-head">
-        <h2>Sessions</h2>
-        <button id="btnCloseSessions" class="icon-btn">✕</button>
+      <div class="modal-head">
+        <div class="modal-head-title">
+          <div class="tm-eyebrow">Library</div>
+          <h2>Sessions</h2>
+        </div>
+        <button id="btnCloseSessions" class="icon-btn" title="Close sessions" aria-label="Close sessions">✕</button>
       </div>
       <div class="modal-body">
         <div class="modal-actions">
-          <button id="btnNewSession" class="btn btn-sm">New session…</button>
-          <button id="btnImportMedia" class="btn btn-sm">⤓ Import media…</button>
-          <button id="btnOpenFolder" class="btn btn-sm">Open folder…</button>
-          <button id="btnRefreshList" class="btn btn-sm">Refresh</button>
+          <button id="btnNewSession" class="btn btn-primary">New session…</button>
+          <button id="btnImportMedia" class="btn">Import media…</button>
+          <button id="btnOpenFolder" class="btn">Open folder…</button>
+          <button id="btnRefreshList" class="btn">Refresh</button>
         </div>
         <div id="sessionList" class="session-list"></div>
       </div>
@@ -276,15 +362,18 @@
 
   <!-- ===================================================== end-session confirm -->
   <div id="endConfirm" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="endConfirmTitle">
-    <div class="modal-card confirm">
-      <div class="drawer-head">
-        <h2 id="endConfirmTitle">End session</h2>
+    <div class="modal-card confirm is-danger">
+      <div class="modal-head">
+        <div class="modal-head-title">
+          <div class="tm-eyebrow">Confirm</div>
+          <h2 id="endConfirmTitle">End session?</h2>
+        </div>
       </div>
       <div class="modal-body">
-        <p class="confirm-copy">Ending the session cannot be resumed, do you wish to end the session?</p>
+        <p class="confirm-copy">Ending the session cannot be resumed.</p>
         <div class="confirm-actions">
           <button id="btnCancelEnd" class="btn">Cancel</button>
-          <button id="btnConfirmEnd" class="btn btn-end">End session</button>
+          <button id="btnConfirmEnd" class="btn btn-danger">End session</button>
         </div>
       </div>
     </div>

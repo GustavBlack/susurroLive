@@ -1,9 +1,9 @@
-// susurroLive — theme palettes (v1.5 "Theme Lab").
-// Single source of truth for the 11 theme color schemes studied in
-// Susurrolive-Theme-Lab-22.html. Consumers:
+// susurroLive — ARCHIVED theme palettes (v1.5 "Theme Lab").
+// v1.8.0: the app uses Tech Moca only (theme/tech-moca.css). v1.9.0: these 11 palettes
+// are the colour source for the chroma-only skins (theme/skins.js).
+// Consumers:
 //   - tools/gen-theme-css.js  -> generates theme/themes.css (static [data-theme] blocks)
-//   - src/renderer/viz.js     -> canvas palette (applyThemePalette)
-//   - src/renderer/app.js     -> picker + persistence
+//   - theme/skins.js          -> derives the Phase II skin chroma sets
 // Do NOT edit themes.css by hand — regenerate it.
 
 export const THEMES = [

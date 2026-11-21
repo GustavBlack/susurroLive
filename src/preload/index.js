@@ -9,7 +9,7 @@ const EVENTS = [
   'diarizeProgress', 'diarizeDone', 'diarizeError',
   'llmCheckupProgress', 'llmCheckupDone', 'llmCheckupError',
   'parakeetProgress', 'parakeetDone', 'parakeetError',
-  'updateStatus', 'mcpCommand', 'sessionChanged', 'mcpStatus',
+  'updateStatus', 'mcpCommand', 'sessionChanged', 'mcpStatus', 'windowState',
 ];
 
 const listeners = new Map();
@@ -27,6 +27,15 @@ contextBridge.exposeInMainWorld('susurro', {
     version: () => ipcRenderer.invoke('app:version'),
     paths: () => ipcRenderer.invoke('app:paths'),
     ready: () => ipcRenderer.send('app:ready'),
+  },
+
+  // ---- frameless window controls ----
+  window: {
+    minimize: () => ipcRenderer.invoke('window:minimize'),
+    toggleMaximize: () => ipcRenderer.invoke('window:toggleMaximize'),
+    close: () => ipcRenderer.invoke('window:close'),
+    isMaximized: () => ipcRenderer.invoke('window:isMaximized'),
+    onState: (cb) => on('windowState', cb),
   },
 
   gpu: { probe: () => ipcRenderer.invoke('gpu:probe') },

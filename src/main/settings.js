@@ -14,7 +14,7 @@ const DEFAULTS = {
   lastSources: [],           // [{kind, deviceId, label, gain, muted}]
   showGpuBanner: true,
   diarizeAutoOnStop: false,  // identify speakers once a stopped/imported session is transcribed
-  theme: 'default',          // v1.5 theme id — see src/renderer/theme/themes.js
+  theme: '',                 // v1.9 skin id; '' = Tech Moca. Old theme ids migrate on boot
   themeMode: 'dark',         // dark | light
   llmCheckup: false,         // master opt-in; the AI checkup is dead unless true
   llmEndpoint: '',           // e.g. http://127.0.0.1:1234/v1 (base, no /chat/completions)

@@ -1,21 +1,20 @@
-// A lattice of softly illuminated tiles, tinted by the active theme (v1.5).
+// A lattice of flat tiles, tinted by the Tech Moca mode or the active skin (v1.9.0).
 // Idle: eight slow light fields on a per-field schedule. Import: progress-aware
 // rising currents. Audio: source/frequency levels. Reading current: scroll energy.
 // All movement uses elapsed seconds; no random flashes or frame-count particles.
 
-import { getTheme, DEFAULT_THEME, hexRgb, mixHex, speakerColors } from './theme/themes.js';
+import { getTechMoca, markColors, hexRgb, mixHex } from './theme/tech-moca.js';
 
 const COLS = 24;
 const clamp = (n, min = 0, max = 1) => Math.max(min, Math.min(max, n));
 const smooth = (t) => { t = clamp(t); return t * t * (3 - 2 * t); };
 const gauss = (d, width) => Math.exp(-0.5 * (d / width) ** 2);
 
-// Canvas palette, derived from the active theme. Mutable module state: the
-// Visualizer.applyThemePalette() method re-derives these on a theme swap. The
+// Canvas palette, derived from Tech Moca. Mutable module state: the
+// Visualizer.applyThemePalette() method re-derives these on a mode swap. The
 // field functions below close over the module bindings, so reassignment
 // propagates to every consumer on the next frame.
 function buildPalette(p, mode) {
-  const pole = mode === 'light' ? '#000000' : '#FFFFFF';
   const ink = hexRgb(p.surface2);
   return {
     ink,
@@ -32,12 +31,11 @@ function buildPalette(p, mode) {
     moss: hexRgb(p.success),
     rust: hexRgb(p.record),
     mutedRgb: hexRgb(p.textMut),
-    spk: speakerColors(p, mode),
-    lip: mixHex(p.accentStrong, p.text, 0.5),     // per-tile specular lip
-    foot: mixHex(p.bg, '#000000', 0.35),          // per-tile shadow foot
+    spk: Array.isArray(p.marks) ? p.marks : markColors(mode),
+    gridLine: hexRgb(p.border),
   };
 }
-const _seed = getTheme(DEFAULT_THEME).dark;
+const _seed = getTechMoca('dark');
 let PAL = buildPalette(_seed, 'dark');
 let RAMP = PAL.ramp;
 let INK = PAL.ink;
@@ -250,9 +248,10 @@ export class Visualizer {
     this.dirty = true;
   }
 
-  /** v1.5: re-derive the canvas palette for a theme swap (called from app.js). */
-  applyThemePalette(theme, mode) {
-    PAL = buildPalette(theme[mode === 'light' ? 'light' : 'dark'], mode === 'light' ? 'light' : 'dark');
+  /** v1.8: re-derive the canvas palette for a mode swap (called from theme.js). */
+  applyThemePalette(palette, mode) {
+    const m = mode === 'light' ? 'light' : 'dark';
+    PAL = buildPalette(palette, m);
     RAMP = PAL.ramp;
     INK = PAL.ink;
     SAGE_RGB = PAL.sage;
@@ -526,32 +525,18 @@ export class Visualizer {
     pixels[offset + 3] += (energy - pixels[offset + 3]) * blend;
     const b = clamp(pixels[offset + 3]);
     const rgb = `${Math.round(pixels[offset])},${Math.round(pixels[offset + 1])},${Math.round(pixels[offset + 2])}`;
-    // Halos soften the seams into a soft bloom; the wider one only on bright tiles,
-    // since the dim periphery's bloom is already near-invisible. No per-tile blurs.
-    if (b > 0.25) {
-      ctx.fillStyle = `rgb(${rgb})`;
-      ctx.globalAlpha = (b - 0.25) * 0.075;
-      ctx.fillRect(x - 2, y - 2, size + 4, size + 4);
-      if (b > 0.5) {
-        ctx.globalAlpha *= 0.45;
-        ctx.fillRect(x - 4, y - 4, size + 8, size + 8);
-      }
-    }
-    ctx.globalAlpha = 0.56 + b * 0.44;
+    // Tech Moca is flat: no bloom, no specular lip, no shadow foot. Energy reads
+    // through opacity and the ramp, and a 1 px hairline keeps the lattice legible
+    // as a technical grid even when the field is quiet.
+    ctx.globalAlpha = clamp((0.18 + b * 0.82) * grain);
     ctx.fillStyle = `rgb(${rgb})`;
     ctx.beginPath();
     ctx.roundRect(x, y, size, size, Math.min(2.2, size * 0.13));
     ctx.fill();
-    // A tiny lit lip and dark foot give each lit tile depth; skipped on dim tiles
-    // where they read as nothing, to keep the dense lattice within the frame budget.
-    if (b > 0.2) {
-      ctx.fillStyle = PAL.lip;
-      ctx.globalAlpha = (0.02 + b * b * 0.22) * grain;
-      ctx.fillRect(x + 2, y + 1, Math.max(0, size - 4), 0.7);
-      ctx.fillStyle = PAL.foot;
-      ctx.globalAlpha = 0.15;
-      ctx.fillRect(x + 2, y + size - 1, Math.max(0, size - 4), 0.7);
-    }
+    ctx.globalAlpha = 0.32;
+    ctx.strokeStyle = `rgb(${PAL.gridLine[0]},${PAL.gridLine[1]},${PAL.gridLine[2]})`;
+    ctx.lineWidth = 1;
+    ctx.stroke();
   }
 }
 

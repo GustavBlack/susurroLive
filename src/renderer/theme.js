@@ -1,133 +1,142 @@
-// theme.js — v1.5 theme engine (renderer side).
-// Applies <html data-theme data-theme-mode>, runs the 667 ms staggered swap
-// (chrome surfaces lead, content follows — see style.css "theme swap"), and
-// retunes the canvas visualizer palette in the same frame.
+// theme.js — v1.9.0 appearance and skin engine (renderer side).
+// Tech Moca is the base palette. A skin is a chroma-only layer: the floor, lines,
+// text, type, spacing, radius, shadow and motion stay locked. The visualizer and
+// speaker marks follow the active skin in the same frame.
 
-import { THEMES, getTheme, DEFAULT_THEME } from './theme/themes.js';
+import { TECH_MOCA } from './theme/tech-moca.js';
+import { SKINS, normalizeSkin, skinPalette } from './theme/skins.js';
 
 let vizRef = null;
 let animTimer = null;
+let currentSkin = '';
 
-/** Paint the theme picker swatches (bg | accent | text strip of the active mode). */
-export function renderThemePicker(root, { theme, themeMode, onPick, onMode }) {
+function clearAnim() {
+  document.documentElement.classList.remove('mode-anim', 'skin-anim');
+}
+
+/** Paint the dark / light control. A segmented pill, not a theme grid. */
+export function renderModePicker(root, { mode, onMode }) {
   root.innerHTML = '';
-  const wrap = document.createElement('div');
-  wrap.className = 'theme-dd';
-  const cur = THEMES.find((t) => t.id === theme) || THEMES[0];
-  // head shows the current theme (with art) and expands the list on click
-  const head = document.createElement('button');
-  head.type = 'button';
-  head.className = 'theme-opt theme-dd-head on';
-  head.title = cur.desc;
-  head.dataset.id = cur.id;
-  const hpal = cur[themeMode] || cur.dark;
-  const hsw = document.createElement('span');
-  hsw.className = 'sw';
-  for (const c of [hpal.bg, hpal.accent, hpal.text]) {
-    const i = document.createElement('i');
-    i.style.background = c;
-    hsw.appendChild(i);
-  }
-  const hmeta = document.createElement('span');
-  hmeta.className = 'meta';
-  const hnm = document.createElement('span');
-  hnm.className = 'nm';
-  hnm.textContent = cur.name;
-  const hvb = document.createElement('span');
-  hvb.className = 'vb';
-  hvb.textContent = cur.vibe;
-  hmeta.append(hnm, hvb);
-  const chev = document.createElement('span');
-  chev.className = 'chev';
-  chev.textContent = '▾';
-  head.append(hsw, hmeta, chev);
-  head.onclick = () => wrap.classList.toggle('open');
-
-  const list = document.createElement('div');
-  list.className = 'theme-grid theme-dd-list';
-
-  for (const t of THEMES) {
-    const opt = document.createElement('button');
-    opt.type = 'button';
-    opt.className = 'theme-opt' + (t.id === theme ? ' on' : '');
-    opt.title = t.desc;
-    opt.dataset.id = t.id;
-
-    const sw = document.createElement('span');
-    sw.className = 'sw';
-    const pal = t[themeMode] || t.dark;
-    for (const c of [pal.bg, pal.accent, pal.text]) {
-      const i = document.createElement('i');
-      i.style.background = c;
-      sw.appendChild(i);
-    }
-    const meta = document.createElement('span');
-    meta.className = 'meta';
-    const nm = document.createElement('span');
-    nm.className = 'nm';
-    nm.textContent = t.name;
-    const vb = document.createElement('span');
-    vb.className = 'vb';
-    vb.textContent = t.vibe;
-    meta.append(nm, vb);
-
-    opt.append(sw, meta);
-    opt.onclick = () => { wrap.classList.remove('open'); onPick(t.id); };
-    list.appendChild(opt);
-  }
-  wrap.append(head, list);
-
-  // dark / light segmentation — per theme, persisted alongside the theme id
   const seg = document.createElement('div');
-  seg.className = 'seg';
+  seg.className = 'segs';
+  seg.setAttribute('role', 'group');
+  seg.setAttribute('aria-label', 'Appearance mode');
   for (const m of ['dark', 'light']) {
     const b = document.createElement('button');
     b.type = 'button';
-    b.className = 'btn btn-sm' + (m === themeMode ? ' on' : '');
+    b.className = 'seg-btn' + (m === mode ? ' on' : '');
     b.textContent = m === 'dark' ? 'Dark' : 'Light';
+    b.setAttribute('aria-pressed', m === mode ? 'true' : 'false');
     b.onclick = () => onMode(m);
     seg.appendChild(b);
   }
-  root.append(wrap, seg);
+  root.appendChild(seg);
+}
+
+/** Paint the skin list. A vertical list of pills, not a grid of mini-palettes. */
+export function renderSkinPicker(root, { skin, onSkin }) {
+  root.innerHTML = '';
+  root.setAttribute('role', 'radiogroup');
+  root.setAttribute('aria-label', 'Colour skin');
+
+  const current = normalizeSkin(skin);
+  const entries = [
+    {
+      id: '',
+      name: 'Tech Moca',
+      note: 'Graphite floor, off-white accent',
+      swatch: [TECH_MOCA.dark.accent, TECH_MOCA.dark.record, TECH_MOCA.dark.success],
+    },
+    ...SKINS.map((s) => ({ id: s.id, name: s.name, note: s.note, swatch: s.swatch })),
+  ];
+
+  for (const entry of entries) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'skin-row' + (entry.id === current ? ' is-active' : '');
+    b.dataset.skin = entry.id;
+    b.setAttribute('role', 'radio');
+    b.setAttribute('aria-checked', entry.id === current ? 'true' : 'false');
+    b.setAttribute('aria-label', `${entry.name} · ${entry.note}`);
+
+    const sw = document.createElement('span');
+    sw.className = 'skin-swatch';
+    sw.setAttribute('aria-hidden', 'true');
+    for (const color of entry.swatch) {
+      const i = document.createElement('i');
+      i.style.setProperty('--s', color);
+      sw.appendChild(i);
+    }
+
+    const name = document.createElement('span');
+    name.className = 'skin-name';
+    name.textContent = entry.name;
+
+    const note = document.createElement('span');
+    note.className = 'skin-note';
+    note.textContent = entry.note;
+
+    const badge = document.createElement('span');
+    badge.className = 'skin-badge';
+    badge.textContent = entry.id === current ? 'Current' : '';
+
+    b.append(sw, name, note, badge);
+    b.onclick = () => onSkin(entry.id);
+    root.appendChild(b);
+  }
 }
 
 /**
- * Swap the active theme with the staged transition:
- *   frame 0   set html.theme-anim  (chrome transitions start at 0 ms)
- *   frame 1   flip data-theme/-mode + retune the viz palette (tokens recompute,
- *             chrome surfaces start blending; content has a 111 ms delay)
- *   +780 ms   drop html.theme-anim (content transitions finish at 778 ms)
+ * Swap skins with a 160 ms chroma fade. The visualizer palette and speaker marks
+ * follow in the same frame. Reduced motion makes it instant.
  */
-export function applyTheme(themeId, mode, { viz } = {}) {
-  const id = getTheme(themeId)?.id || DEFAULT_THEME;
+export function applySkin(skin, { viz } = {}) {
+  const s = normalizeSkin(skin);
+  const html = document.documentElement;
+  const m = html.dataset.themeMode === 'light' ? 'light' : 'dark';
+
+  html.classList.add('skin-anim');
+  clearTimeout(animTimer);
+  void html.offsetWidth;
+  html.dataset.skin = s;
+  currentSkin = s;
+  if (viz) vizRef = viz;
+  if (vizRef) vizRef.applyThemePalette(skinPalette(s, m), m);
+  animTimer = setTimeout(clearAnim, 180);
+  return s;
+}
+
+/**
+ * Swap dark / light with a 160 ms colour fade. The visualizer palette follows in
+ * the same frame. Reduced motion makes it instant (the token durations are 0).
+ */
+export function applyMode(mode, { viz } = {}) {
   const m = mode === 'light' ? 'light' : 'dark';
   const html = document.documentElement;
-  const next = `${id}|${m}`;
-  if (html.dataset.theme === id && html.dataset.themeMode === m) return next;
+  if (html.dataset.themeMode === m) return m;
 
-  html.classList.add('theme-anim');
+  html.classList.add('mode-anim');
   clearTimeout(animTimer);
-
-  // Force a synchronous style recalc so the pre-swap colors are committed WITH the
-  // transition rules active; the token flip below then animates. rAF is unusable
-  // here: hidden windows never fire it, which would freeze the swap mid-flight.
+  // Commit the pre-swap colours with the transition rules active, then flip.
   void html.offsetWidth;
-  html.dataset.theme = id;
+  html.dataset.theme = 'tech-moca';
   html.dataset.themeMode = m;
   if (viz) vizRef = viz;
-  if (vizRef) vizRef.applyThemePalette(getTheme(id), m);
-  animTimer = setTimeout(() => html.classList.remove('theme-anim'), 780);
-  return next;
+  if (vizRef) vizRef.applyThemePalette(skinPalette(currentSkin, m), m);
+  animTimer = setTimeout(clearAnim, 180);
+  return m;
 }
 
 /** Boot-time application: no animation class, palette straight onto the viz. */
-export function initTheme(themeId, mode, viz) {
-  const id = getTheme(themeId)?.id || DEFAULT_THEME;
+export function initTheme(mode, viz, skin) {
   const m = mode === 'light' ? 'light' : 'dark';
+  const s = normalizeSkin(skin);
   const html = document.documentElement;
-  html.dataset.theme = id;
+  html.dataset.theme = 'tech-moca';
   html.dataset.themeMode = m;
+  html.dataset.skin = s;
+  currentSkin = s;
   vizRef = viz || null;
-  if (vizRef) vizRef.applyThemePalette(getTheme(id), m);
-  return `${id}|${m}`;
+  if (vizRef) vizRef.applyThemePalette(skinPalette(s, m), m);
+  return m;
 }

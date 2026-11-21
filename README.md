@@ -8,7 +8,7 @@
 cloud) built for one job: capture the audio happening *around* the machine — a meeting, an interview,
 a session, a room — and hand back clean text, JSON with timecodes, and the audio itself.
 
-**v1.7.1** · Windows 10/11 x64 · BSD-3-Clause · ships as an installer **or** a single portable `.exe`
+**v1.9.0** · Windows 10/11 x64 · BSD-3-Clause · ships as an installer **or** a single portable `.exe`
 
 ---
 
@@ -61,7 +61,7 @@ CUDA or Python install.
 | **AI transcript checkup** | *Opt-in, never automatic*: send a finished transcript to **your own** OpenAI-compatible endpoint and let a local model fix small recognition errors — without mutating the transcript. See [AI transcript checkup](#ai-transcript-checkup-opt-in). |
 | **Speakers** | After transcription, **Identify speakers** labels who spoke when (NVIDIA Nemotron-3-Diarization via NeMo-Speech.cpp, fully offline). Speakers are numbered by order of first speaking; optional auto-run when a session finishes. |
 | **Export** | Clean `.txt`, timecoded `.json`, and the audio itself — with speaker paragraphs / per-word speakers when identified. Exports mirror exactly what you see (checked or original). (`.srt`/`.vtt` → v2.) |
-| **Themes** | 11 built-in themes, each with a dark and a light variant, swapped with an animation. |
+| **The look** | Tech Moca: graphite console, greige ink, condensed chrome. Dark and light, one palette, no blue. |
 | **Agent-ready sessions** | Every session folder carries an `AGENTS.md` with the folder map and the `session.json` schema, so any coding agent can read a session without guessing. |
 | **Agent control (MCP)** | Optional local MCP server: an agent can start/stop recordings, choose the session folder, add mic/system sources by profile, wait for transcription, and read/export the transcript. Loopback + bearer token; see [Agent control (MCP)](docs/mcp.md). |
 | **Portable** | Installer or one `.exe`. No Python, no CUDA install, no cloud account. |
@@ -139,43 +139,62 @@ errors surface as "endpoint requires an API key — enter it in Settings."
 
 ## The look
 
-A portrait tablet layout (~4:5, 820×1040) with a squares-based audio visualizer on the right rail,
-never cramped.
+**Tech Moca**: graphite console, greige ink, condensed chrome. A calm, technical, dark-first
+look for a tool you work in all day. The layout is a portrait tablet (~4:5, 820×1040) with a
+squares-based audio visualizer on the right rail, never cramped.
 
-- **11 themes**, each with dark and light variants: Susurro Warm (default), Obsidian, Midnight,
-  Forest, Nord, Amethyst, Crimson, Deep Teal, True Black, Desert, Tokyo Night. Pick from the dropdown
-  in the header; the swap is animated and the visualizer re-tints with the theme. Tokens live in
-  [`docs/warm-ink-tokens.md`](docs/warm-ink-tokens.md).
-- The grid is a textured, flowing lattice with smooth audio response, a directional import current,
-  and a still pause indicator. The idle grid rotates through twelve procedural light fields on a dwell
-  schedule, randomized per launch so it never opens the same way twice. Scrolling the transcript
-  stirs a reading current through the grid; every finished chunk sends a soft heartbeat down the rail.
+- **Tech Moca is the base, dark and light.** Dark is the default; light is greige paper with ink
+  chrome. The base accent is off-white; the only warmth is the sand focus token; status is always a
+  word on its own well. No gradients, no glow. Tokens live in
+  [`src/renderer/theme/tech-moca.css`](src/renderer/theme/tech-moca.css).
+- **The 11 earlier themes return as skins**, not as a second design: Susurro Warm, Obsidian,
+  Midnight, Forest, Nord, Amethyst, Crimson, Deep Teal, True Black, Desert, Tokyo Night. A skin
+  retints accent, status, chart and speaker colours only; the floor, type, spacing, radius and
+  motion stay locked. The picker is in Settings → Appearance; the contrast gate is
+  [`tools/check-skins.js`](tools/check-skins.js). See
+  [`docs/v1.8.0-tech-moca-redesign.md`](docs/v1.8.0-tech-moca-redesign.md).
+- **The window is frameless with Tech Moca controls.** The header is the drag strip; minimize,
+  maximize/restore and close are drawn in the same hairline pill language as the rest of the chrome.
+  Edge resize, snap and Win+arrow still work.
+- **The app icon is the yellow cube mark**, built as a multi-size `.ico` from the raw artwork
+  (`tools/make-icon.js`); the same mark is the header brand.
+- **Settings is a floating window with tabs** (Engine, Transcription, Appearance, AI checkup,
+  Agents, About), not a long drawer. Escape closes it and focus returns to the Settings button.
+- The grid is a flat, flowing lattice with smooth audio response, a directional import current,
+  and a still pause indicator. The idle grid rotates through twelve procedural light fields on a
+  dwell schedule, randomized per launch so it never opens the same way twice. Scrolling the
+  transcript stirs a reading current through the grid; every finished chunk sends a soft heartbeat
+  down the rail.
 - All of it respects the system's reduced-motion preference.
 
 Whisper output is assembled using its original word boundaries, preserving contractions and subword
 fragments (including zero-duration suffixes). This fixes app-created splits such as `token ization`
-and missing endings such as `I'll` becoming `I`. For foreign languages, select **auto — detect** and
+and missing endings such as `I'll` becoming `I`. For foreign languages, select **auto · detect** and
 a multilingual model in Settings.
 
 ## Status
 
-**v1.7.1 is built, verified, and published** — installer + portable + update feed. It is the v1.7.0
-MCP release with the packaged Hermes skill renamed to `susurro-live-mcp` (see
-[`docs/v1.7.1-skill-rename.md`](docs/v1.7.1-skill-rename.md)); no app behaviour changed. Verified by real
-execution on this machine, not claims:
+**v1.9.0 is built and verified on this machine.** It is Phase II of the Tech Moca redesign: the 11
+earlier themes return as chroma-only skins, the window is frameless with Tech Moca controls, and the
+app icon is the yellow cube mark. Phase I (v1.8.0) is the base design. Verified by real execution,
+not claims:
 
 | Check | Result |
 | --- | --- |
-| Test suite | 12/12 suites green: engine, pipeline, session manifest, import, exporters, visualizer, LLM harness (9 cases), checkup IPC, parakeet engine (SKIP when unprovisioned), MCP protocol/auth, Hermes skill helper, MCP recording E2E |
-| MCP | loopback server starts with the app; 18 tools; bearer/Host/Origin guards; token rotation; real recording → stop → transcript through HTTP |
-| App boot | window renders at 820×1040, **0 page errors**; dev **and** packaged `--smoke` pass |
-| Packaged smoke | exercises the real installed payload: bundled model, `resources/bin` engine, GPU probe, update check |
-| GPU probe | RTX 5090, sm_120, 32 GB VRAM, driver 617.42 → **accelerated** (Blackwell via whisper.cpp CUDA arch 120) |
-| Native engine | whisper.cpp built with CUDA 12.9, `ggml-cuda.dll` loaded; CPU fallback path exercised |
-| Models | `small.en` 488 MB **bundled**; `large-v3-turbo` (1.62 GB) and `large-v3` (3.10 GB) download on demand — all transcribe correctly on GPU |
-| Transcription | real (non-demo) output on `jfk.wav`: 1.25 s small.en · 1.72 s large-v3-turbo · 2.74 s large-v3 |
-| Chunking / timeline | 11 s source → 3 chunks (5.12 / 5.12 / 0.76 s), offsets applied once, monotonic, last word inside the recording |
-| Session I/O | `session.json` + embedded JSON Schema, chunk WAVs, per-chunk sidecars, `full.wav`, `AGENTS.md` |
+| App boot | window renders at 820×1040, **0 page errors**; dev `--smoke` passes |
+| Smoke | floating settings geometry and 6 tabs, tab switching, arrow-key navigation, Escape/focus return, dark/light persistence, skin swap + persistence in both modes, frameless chrome (drag strip, minimize, maximize/restore), engine-first model list, checkup gating, minimum-window scroll check |
+| Visualizer | 31/31 checks green with the Tech Moca palette and flat tiles; the canvas follows the active skin |
+| Skins | 11 skins × 2 modes pass the contrast gate (`tools/check-skins.js`); chroma-only, no layout movement |
+| UI | Tech Moca tokens; skins retint accent, status, chart and speaker colours; no gradients or glow |
+| Window | frameless with Tech Moca controls; maximize/restore and minimize verified in the smoke |
+| Icon | multi-size `.ico` from the raw artwork; header brand uses the 32 px mark |
+| Minimum window | 671×852 inner, `document.scrollWidth == innerWidth` |
+| Settings | 6 tabs, arrow-key navigation, Escape closes, focus returns to the Settings button |
+| Unchanged | engine, pipeline, session I/O, import, exporters, LLM harness and MCP behaviour is untouched by this release |
+
+The v1.7.1 engine, pipeline, session, import, exporter, LLM-harness, parakeet and MCP suites remain
+the regression baseline; this release changed the renderer, the window chrome, the icon and the smoke
+harness only.
 
 Not done yet (deferred to v2): `.srt`/`.vtt` export, per-app audio capture, a resident whisper model,
 and overlap-window seam reconciliation — see [`docs/PLAN.md` §3](docs/PLAN.md). Speaker diarization
@@ -202,10 +221,10 @@ susurroLive/
 │  ├─ renderer/       UI (components, theme/, visualizer, styles)
 │  └─ shared/         code shared across processes
 ├─ native/            engine build output + sidecar binaries (gitignored — fetched by npm scripts)
-├─ assets/            icon, brand
+├─ assets/            icon (multi-size .ico), brand
 ├─ scripts/           build / fetch / verify helper scripts
 ├─ tests/             unit tests + fixtures
-└─ tools/             test harnesses + dev utilities (engine, pipeline, smoke, inspectors)
+└─ tools/             test harnesses + dev utilities (engine, pipeline, smoke, skins, icon, inspectors)
 ```
 
 ## Quick start (from source)
@@ -218,7 +237,10 @@ npm run native:whisper   # fetch/build whisper.cpp + CUDA (see docs/DEV.md for t
 npm run native:models    # download the default ggml model
 npm run native:diarizer  # build NeMo-Speech.cpp (speaker diarization) + fetch its model
 npm run dev              # launch the app
-npm run smoke            # headless boot + screenshot + diagnostics
+npm run smoke            # headless boot + screenshot + diagnostics (add -- --smoke-show for visible artifacts)
+npm run gen:skins        # regenerate theme/skins.css + skins.json from skins.js
+npm run check:skins      # contrast gate for every skin in both modes
+npm run icon             # rebuild assets/icon.ico from the raw artwork
 npm run dist             # produce the installer, portable exe, and update feed
 ```
 
@@ -253,7 +275,8 @@ See [`docs/DEV.md`](docs/DEV.md) for the manual checklist and known limitations.
 - [`docs/gpu-cuda.md`](docs/gpu-cuda.md) — detection, fallback, build archs
 - [`docs/installer.md`](docs/installer.md) — installer, portable target, and the update feed
 - [`docs/llm-harness.md`](docs/llm-harness.md) — AI checkup harness: prompt shape, batching, normalization, per-server quirks
-- [`docs/warm-ink-tokens.md`](docs/warm-ink-tokens.md) — design tokens
+- [`docs/v1.8.0-tech-moca-redesign.md`](docs/v1.8.0-tech-moca-redesign.md) — Phase I redesign and Phase II skins (shipped in v1.9.0)
+- [`docs/warm-ink-tokens.md`](docs/warm-ink-tokens.md) — archived Warm Ink palette (skin colour source)
 - [`docs/adr/`](docs/adr/) — architecture decision records
 - Per-release notes: `docs/v<version>-<slug>.md`
 
