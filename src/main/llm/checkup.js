@@ -155,6 +155,10 @@ function applyCheckup(words, checkup) {
     const word = words[e.i];
     if (!word) continue;
     const chunkKey = word.chunk != null ? String(word.chunk) : '';
+    // v1.9.2: a chunk the run never saw (it landed while a live checkup was in flight) has no
+    // fingerprint and no derived edits — never apply one there, even if a seam shift makes the
+    // index land on a word that coincidentally matches `orig`.
+    if (!(chunkKey in hashes)) continue;
     if (driftedSet.has(chunkKey)) continue;
     if (word.w !== e.orig) continue; // belt-and-braces: stored word changed
     wordsOut[e.i] = { ...word, w: e.w };
@@ -171,8 +175,11 @@ function applyCheckup(words, checkup) {
  * the IPC layer owns session.json; this returns the full `checkup` block.
  */
 async function runCheckup({ session, settings, signal, onProgress, chatFn, vocabulary }) {
+  // v1.9.2: snapshot the words. A LIVE run keeps transcribing while this executes, and
+  // rebuildTranscript swaps in a fresh array on every chunkDone — edits, fingerprints and
+  // batch ranges must all refer to one stable basis, not to a timeline that grows mid-run.
   const words = (session && session.transcript && Array.isArray(session.transcript.words))
-    ? session.transcript.words : [];
+    ? session.transcript.words.slice() : [];
   if (!words.length) throw new Error('session has no transcript words to check');
 
   // Cap the batching budget: a 1M-token endpoint setting (common when it was probed from a

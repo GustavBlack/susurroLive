@@ -299,6 +299,71 @@ async function main() {
     pass('9 vocabulary: seed, dedupe, malformed fallback, setActive round-trip');
   }
 
+  // ---- case 10: LIVE run semantics (v1.9.2) — snapshot basis + unseen chunks
+  {
+    // (a) runCheckup snapshots the words: chunks that land mid-run (rebuildTranscript swaps in
+    // a fresh array on every chunkDone) must stay out of the block; edits and fingerprints
+    // refer to the call-time words only.
+    const words = makeWords(6, 3); // chunks 0 (0-2), 1 (3-5)
+    words[2].w = 'thier';
+    let release;
+    const gate = new Promise((r) => { release = r; });
+    const slow = http.createServer((req, res) => {
+      let raw = '';
+      req.on('data', (c) => { raw += c; });
+      req.on('end', async () => {
+        if (req.url.endsWith('/chat/completions')) {
+          await gate;   // hold the answer until the test has grown the transcript mid-run
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ choices: [{ message: { content: editsJson([[2, 'their']]) } }] }));
+        } else {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ data: [{ id: 'stub' }] }));
+        }
+      });
+    });
+    await new Promise((resolve) => slow.listen(0, '127.0.0.1', resolve));
+    const slowBase = 'http://127.0.0.1:' + slow.address().port;
+    const session = { transcript: { words } };
+    const runP = checkup.runCheckup({
+      session,
+      settings: { llmEndpoint: slowBase, llmModel: 'm', llmContextTokens: 8192 },
+    });
+    // mid-run: three more words arrive in a new chunk — the pipeline swaps the array the way
+    // rebuildTranscript does — and the old array is mutated in place too. Both are ignored.
+    session.transcript = { words: words.concat([
+      { t: 2.4, d: 0.3, w: 'lateword6', chunk: 2 },
+      { t: 2.8, d: 0.3, w: 'lateword7', chunk: 2 },
+    ]) };
+    words.push({ t: 9.9, d: 0.1, w: 'in-place', chunk: 2 });
+    release();
+    const block = await runP;
+    assert.deepEqual(Object.keys(block.chunkHashes).sort(), ['0', '1'], 'hashes cover only the call-time chunks');
+    assert.equal(block.edits.length, 1);
+    assert.equal(block.edits[0].orig, 'thier');
+    assert.ok(!JSON.stringify(block).includes('lateword'), 'grown timeline stayed out of the block');
+    slow.close();
+
+    // (b) applyCheckup never touches chunks the run never saw: chunk 2 has no fingerprint, so
+    // an edit that a seam shift happens to land there is dropped even when the text matches.
+    const seenWords = [
+      { t: 0, d: 0.3, w: 'their', chunk: 0 },
+      { t: 0.4, d: 0.3, w: 'word1', chunk: 0 },
+      { t: 0.8, d: 0.3, w: 'word2', chunk: 0 },
+    ];
+    const liveWords = seenWords.concat([{ t: 1.2, d: 0.3, w: 'lateword6', chunk: 2 }]);
+    const liveBlock = {
+      active: true,
+      edits: [{ i: 0, orig: 'their', w: 'their!' }, { i: 3, orig: 'lateword6', w: 'lateword6!' }],
+      chunkHashes: checkup.chunkHashes(seenWords),
+    };
+    const r = checkup.applyCheckup(liveWords, liveBlock);
+    assert.equal(r.words[0].w, 'their!', 'seen-chunk edit still applies');
+    assert.equal(r.words[3].w, 'lateword6', 'unseen-chunk edit never applies');
+    assert.deepEqual(r.driftedChunkIds, [], 'an unseen chunk is not drift, just unseen');
+    pass('10 live run: snapshot basis + edits never touch unseen chunks');
+  }
+
   server.close();
   console.log('\nLLM HARNESS: PASS (' + passed.length + ' cases)');
 }

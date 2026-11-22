@@ -47,6 +47,7 @@ const REPO_ROOT = path.join(__dirname, '..', '..');
 const BIN_DIR = app.isPackaged ? path.join(process.resourcesPath, 'bin') : path.join(REPO_ROOT, 'native', 'bin');
 const MODEL_DIR = app.isPackaged ? path.join(process.resourcesPath, 'models') : path.join(REPO_ROOT, 'native', 'models');
 const RENDERER_HTML = path.join(__dirname, '..', 'renderer', 'index.html');
+const RENDERER_URL = pathToFileURL(RENDERER_HTML).href;
 
 // --------------------------------------------------------------------------- app state
 let win = null;
@@ -506,9 +507,14 @@ function registerIpc() {
     repo: REPO_ROOT, bin: BIN_DIR, models: MODEL_DIR, userData: app.getPath('userData'),
   }));
 
-  // Frameless window controls. Resolve the sender's own window; never trust a
-  // renderer-supplied id.
-  const senderWindow = (event) => BrowserWindow.fromWebContents(event.sender);
+  // Frameless window controls. Only our own page, in our own window, may act:
+  // check the sender's frame and URL, never a renderer-supplied id (§10.16).
+  const senderWindow = (event) => {
+    if (!win || win.isDestroyed() || event.sender !== win.webContents) return null;
+    const frame = event.senderFrame;
+    if (!frame || frame.parent !== null || frame.url !== RENDERER_URL) return null;
+    return win;
+  };
   ipcMain.handle('window:minimize', (event) => {
     const w = senderWindow(event);
     if (w) w.minimize();
@@ -524,9 +530,9 @@ function registerIpc() {
     const w = senderWindow(event);
     if (w) w.close();
   });
-  ipcMain.handle('window:isMaximized', (event) => {
+  ipcMain.handle('window:state', (event) => {
     const w = senderWindow(event);
-    return !!w && w.isMaximized();
+    return w ? { maximized: w.isMaximized(), focused: w.isFocused() } : null;
   });
 
   ipcMain.handle('gpu:probe', () => gpu);
@@ -801,9 +807,10 @@ function registerIpc() {
 
   ipcMain.handle('llm:checkup:run', async () => {
     if (!active) return { ok: false, error: 'no session' };
-    if (recording) return { ok: false, error: 'stop recording before running the AI checkup' };
+    // v1.9.2: the checkup may run LIVE — recording and chunks still in flight are fine, it
+    // checks whatever words exist at click time (runCheckup snapshots them). Only the import
+    // decode phase and a diarize run still hold it off.
     if (importing) return { ok: false, error: 'wait for the import to finish' };
-    if (pipeline && pipeline.remaining > 0) return { ok: false, error: 'wait for transcription to finish' };
     if (diarizeRun) return { ok: false, error: 'wait for speaker diarization to finish' };
     if (!active.transcript?.words?.length) return { ok: false, error: 'nothing transcribed yet' };
     if (checkupRun) return { ok: false, error: 'an AI checkup run is already active' };
@@ -1046,22 +1053,54 @@ async function runSmoke() {
         process.exitCode = 1;
       }
     } catch { /* non-fatal */ }
+    const overlayDrag = await win.webContents.executeJavaScript(`JSON.stringify({
+      backdrop: getComputedStyle(document.getElementById('settingsDrawer')).getPropertyValue('-webkit-app-region'),
+      win: getComputedStyle(document.getElementById('settingsWindow')).getPropertyValue('-webkit-app-region'),
+    })`);
+    console.log('[smoke] overlay drag:', overlayDrag);
+    try {
+      const od = JSON.parse(overlayDrag);
+      if (od.backdrop !== 'drag' || od.win !== 'no-drag') {
+        console.error(`[smoke] FAILED: dialog drag regions wrong: ${overlayDrag}`);
+        process.exitCode = 1;
+      }
+    } catch { /* non-fatal */ }
     const hitTest = await win.webContents.executeJavaScript(
       '(() => { const el = document.elementFromPoint(innerWidth / 2, innerHeight / 2);' +
       ' return el ? (el.id || el.className || el.tagName) : "none"; })()');
     console.log('[smoke] hit @center:', hitTest);
 
-    // 2.1) v1.9 frameless window: custom Tech Moca controls, drag strip, maximize/restore.
-    const frameCheck = await win.webContents.executeJavaScript(`JSON.stringify({
-      min: !!document.getElementById('btnMinimize'),
-      max: !!document.getElementById('btnMaximize'),
-      close: !!document.getElementById('btnCloseWindow'),
-      drag: getComputedStyle(document.querySelector('.hdr')).getPropertyValue('-webkit-app-region'),
-    })`);
+    // 2.1) v1.9.1 frameless window: Tech Moca §10.16 chrome (tm-titlebar drag
+    // strip, tm-window-controls fixed at the window's top right, 26 px faces,
+    // hairline glyphs, controls above overlays).
+    const frameCheck = await win.webContents.executeJavaScript(`JSON.stringify((() => {
+      const bar = document.querySelector('.tm-titlebar');
+      const controls = document.querySelector('.tm-window-controls');
+      const face = document.querySelector('#btnMaximize .tm-window-face');
+      const cr = controls?.getBoundingClientRect();
+      return {
+        min: !!document.getElementById('btnMinimize'),
+        max: !!document.getElementById('btnMaximize'),
+        close: !!document.getElementById('btnCloseWindow'),
+        drag: bar ? getComputedStyle(bar).getPropertyValue('-webkit-app-region') : '',
+        btnDrag: getComputedStyle(document.getElementById('btnSettings')).getPropertyValue('-webkit-app-region'),
+        controls: !!controls,
+        fixed: controls ? getComputedStyle(controls).position : '',
+        z: controls ? getComputedStyle(controls).zIndex : '',
+        top: cr ? Math.round(cr.top) : -1,
+        right: cr ? Math.round(cr.right) : -1,
+        vw: innerWidth,
+        face: face ? Math.round(face.getBoundingClientRect().width) : -1,
+        glyphs: document.querySelectorAll('.tm-window-button svg').length,
+      };
+    })())`);
     console.log('[smoke] window chrome:', frameCheck);
     try {
       const fc = JSON.parse(frameCheck);
-      if (!fc.min || !fc.max || !fc.close || fc.drag !== 'drag') {
+      const chromeOk = fc.min && fc.max && fc.close && fc.controls
+        && fc.drag === 'drag' && fc.btnDrag === 'no-drag' && fc.fixed === 'fixed' && fc.z === '70'
+        && fc.top === 0 && fc.right === fc.vw && fc.face === 26 && fc.glyphs === 3;
+      if (!chromeOk) {
         console.error(`[smoke] FAILED: frameless chrome wrong: ${frameCheck}`);
         process.exitCode = 1;
       }
@@ -1071,14 +1110,30 @@ async function runSmoke() {
     await win.webContents.executeJavaScript("document.getElementById('btnMaximize').click()");
     await new Promise((r) => setTimeout(r, 400));
     const maxAfter = win.isMaximized();
+    const maxState = await win.webContents.executeJavaScript(`JSON.stringify({
+      label: document.getElementById('btnMaximize').getAttribute('aria-label'),
+      data: document.querySelector('.tm-window-controls')?.dataset.maximized,
+    })`);
     await win.webContents.executeJavaScript("document.getElementById('btnMaximize').click()");
     await new Promise((r) => setTimeout(r, 400));
     const maxRestored = win.isMaximized();
-    console.log('[smoke] window max   :', JSON.stringify({ maxBefore, maxAfter, maxRestored }));
+    const restoredState = await win.webContents.executeJavaScript(`JSON.stringify({
+      label: document.getElementById('btnMaximize').getAttribute('aria-label'),
+      data: document.querySelector('.tm-window-controls')?.dataset.maximized,
+    })`);
+    console.log('[smoke] window max   :', JSON.stringify({ maxBefore, maxAfter, maxRestored, maxState, restoredState }));
     if (maxBefore === maxAfter || maxAfter === maxRestored) {
       console.error('[smoke] FAILED: maximize/restore did not toggle the window state');
       process.exitCode = 1;
     }
+    try {
+      const a = JSON.parse(maxState);
+      const b = JSON.parse(restoredState);
+      if (a.label !== 'Restore' || a.data !== 'true' || b.label !== 'Maximize' || b.data !== 'false') {
+        console.error('[smoke] FAILED: maximize/restore glyph state did not follow the window');
+        process.exitCode = 1;
+      }
+    } catch { /* non-fatal */ }
     win.unmaximize();
     win.setSize(820, 1040);
     await new Promise((r) => setTimeout(r, 300));
@@ -1378,9 +1433,10 @@ async function runSmoke() {
       }
     } catch { /* non-fatal */ }
 
-    // 2.8) v1.6.0 AI checkup button gating. Hidden while the feature is disabled (default);
-    // visible only when enabled + configured AND a finished, diarization-resolved session is
-    // open AND the pipeline is idle; hidden again while a recording status is forced.
+    // 2.8) AI checkup button gating (v1.9.2 live rules). Hidden while the feature is disabled
+    // (default); visible when enabled + configured AND the open session has transcribed words.
+    // Diarization no longer gates it, and it stays visible while recording: the checkup runs
+    // live over the words that exist so far.
     const btnHidden0 = await win.webContents.executeJavaScript(
       'document.getElementById("btnAiCheckup")?.classList.contains("hidden")');
     console.log('[smoke] checkup hidden (feature disabled):', btnHidden0);
@@ -1389,7 +1445,8 @@ async function runSmoke() {
       process.exitCode = 1;
     }
 
-    // fixture: a finished, diarized session. No audio file is needed — the gate never plays it.
+    // fixture: a finished, diarized session (diarization is no longer required by the gate).
+    // No audio file is needed — the gate never plays it.
     const fxParent = path.join(app.getPath('temp'), 'susurro-smoke-checkup');
     try { fs.rmSync(fxParent, { recursive: true, force: true }); } catch { /* fresh dir */ }
     fs.mkdirSync(fxParent, { recursive: true });
@@ -1454,24 +1511,23 @@ async function runSmoke() {
       if (!item) return JSON.stringify({ fail: 'fixture session not listed' });
       item.click();
       const shown = await poll(() => !btn.classList.contains('hidden') || null);
-      out.visibleWhenConfiguredAndResolved = !!shown;
+      out.visibleWhenConfigured = !!shown;
       out.diarizeBtnShown = !document.getElementById('btnDiarize')?.classList.contains('hidden');
       return JSON.stringify(out);
     })()`);
     console.log('[smoke] checkup gate    :', gateCheck);
     try {
       const gc = JSON.parse(gateCheck);
-      if (gc.fail || !gc.hiddenWithNoSession || !gc.visibleWhenConfiguredAndResolved) {
+      if (gc.fail || !gc.hiddenWithNoSession || !gc.visibleWhenConfigured) {
         console.error(`[smoke] FAILED: AI checkup gating wrong: ${gateCheck}`);
         process.exitCode = 1;
       }
     } catch { /* non-fatal */ }
 
-    // 2.8b) regression: a diarization that finishes IN THE OPEN WINDOW must resolve the gate.
-    // Main emits the block identity on the transcript event, but session:current is not
-    // re-fetched — the renderer has to fold that identity into S.session, or the button stays
-    // hidden until the session is reopened (real 1.6.0 bug: user ran a diarize, then never saw
-    // the checkup button).
+    // 2.8b) regression, v1.9.2: diarization no longer gates the checkup. A finished session
+    // with NO diarization block must show the button right away (the 1.6.0 gate kept it hidden
+    // until diarization resolved), and a diarization that finishes IN THE OPEN WINDOW — main
+    // pushes the block identity on the transcript event — must not hide it again.
     const fxB = store.createSession({
       parentDir: fxParent, name: 'smoke-checkup-inwindow',
       settings: { model: 'small.en' }, gpu: null,
@@ -1505,9 +1561,9 @@ async function runSmoke() {
     })()`);
     let bd = {};
     try { bd = JSON.parse(beforeDiar); } catch { bd = { fail: String(beforeDiar) }; }
-    console.log('[smoke] checkup hidden (diar pending)  :', bd.hidden, bd.fail ? `(${bd.fail})` : '');
-    if (bd.fail || bd.hidden !== true) {
-      console.error(`[smoke] FAILED: AI checkup button visible before diarization resolved: ${beforeDiar}`);
+    console.log('[smoke] checkup visible (no diar)      :', bd.hidden === false, bd.fail ? `(${bd.fail})` : '');
+    if (bd.fail || bd.hidden !== false) {
+      console.error(`[smoke] FAILED: AI checkup button hidden on a finished, non-diarized session: ${beforeDiar}`);
       process.exitCode = 1;
     }
 
@@ -1524,18 +1580,19 @@ async function runSmoke() {
       'document.getElementById("btnAiCheckup").classList.contains("hidden")');
     console.log('[smoke] checkup visible (diar done)    :', afterDiar === false);
     if (afterDiar !== false) {
-      console.error('[smoke] FAILED: AI checkup button did not appear after an in-window diarization');
+      console.error('[smoke] FAILED: AI checkup button vanished after an in-window diarization');
       process.exitCode = 1;
     }
 
-    // force a fake recording status through the real event path — the button must hide.
+    // force a fake recording status through the real event path — the button must STAY visible:
+    // v1.9.2 runs the checkup live over the words that exist so far.
     send('recordState', { recording: true, paused: false });
     await new Promise((r) => setTimeout(r, 300));
-    const hiddenWhileRecording = await win.webContents.executeJavaScript(
-      'document.getElementById("btnAiCheckup").classList.contains("hidden")');
-    console.log('[smoke] checkup hidden (recording)      :', hiddenWhileRecording);
-    if (hiddenWhileRecording !== true) {
-      console.error('[smoke] FAILED: AI checkup button visible while recording');
+    const visibleWhileRecording = await win.webContents.executeJavaScript(
+      'document.getElementById("btnAiCheckup").classList.contains("hidden") === false');
+    console.log('[smoke] checkup visible (recording)    :', visibleWhileRecording);
+    if (visibleWhileRecording !== true) {
+      console.error('[smoke] FAILED: AI checkup button hidden while recording (live-checkup regression)');
       process.exitCode = 1;
     }
     send('recordState', { recording: false, paused: false });

@@ -34,7 +34,7 @@ contextBridge.exposeInMainWorld('susurro', {
     minimize: () => ipcRenderer.invoke('window:minimize'),
     toggleMaximize: () => ipcRenderer.invoke('window:toggleMaximize'),
     close: () => ipcRenderer.invoke('window:close'),
-    isMaximized: () => ipcRenderer.invoke('window:isMaximized'),
+    getState: () => ipcRenderer.invoke('window:state'),
     onState: (cb) => on('windowState', cb),
   },
 

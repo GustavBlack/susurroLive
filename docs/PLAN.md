@@ -1,5 +1,10 @@
 # susurroLive — Execution Plan
 
+> **v1.9.1 (2026-11-22):** the single change after v1.9.0 — the frameless window now follows Tech
+> Moca §10.16 exactly (`tm-titlebar` handle, `tm-window-controls` at the window's top right, 26 px
+> faces, hairline glyphs, controls above every overlay). See
+> [`v1.9.1-frameless-window.md`](v1.9.1-frameless-window.md).
+>
 > **v1.9.0 (2026-11-21):** Phase II of the Tech Moca redesign: the 11 earlier themes return as
 > chroma-only skins, the window is frameless with Tech Moca controls, and the app icon is the yellow
 > cube mark. Phase I (v1.8.0) is the base design. See

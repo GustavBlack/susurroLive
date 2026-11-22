@@ -57,7 +57,11 @@ peak meter visible so the user can trim gains manually. (Auto-gain is a v2 nicet
 
 ## Chunker
 
-- **Window:** `chunkSec` (default 30).
+- **Window:** `chunkSec` — presets **15 / 30 / 60 / 120 s**, UI default **60**. 30–60 s for typical
+  use; 120 s for very long multi-speaker meetings. This is a *quality* knob, not a latency knob:
+  each window transcribes concurrently with the meeting, so a two-hour meeting is fully transcribed
+  by the time it stops except for the tail. Smaller windows (below the presets) shrink whisper's
+  context and, because overlapping windows are not yet reconciled, duplicate words at the seams.
 - **Trigger:** sample count → closes `audio/chunk_NNNN.wav`; the next PCM opens the next file.
 - **Alignment:** full chunks are sample-exact, even when a buffer crosses a boundary.
   Pause/Stop close partial chunks. `offsetSec` is cumulative captured samples / sample rate,

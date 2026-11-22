@@ -2,9 +2,11 @@
 
 ## Run it
 
-> **v1.9.0 UI:** Tech Moca is the base design; the 11 earlier themes return as chroma-only skins
-> (Settings → Appearance), the window is frameless with Tech Moca controls, and the app icon is the
-> yellow cube mark. See [`v1.8.0-tech-moca-redesign.md`](v1.8.0-tech-moca-redesign.md).
+> **v1.9.1 UI:** Tech Moca is the base design; the 11 earlier themes return as chroma-only skins
+> (Settings → Appearance), the window is frameless per Tech Moca §10.16 (`tm-titlebar` handle,
+> `tm-window-controls` at the window's top right), and the app icon is the yellow cube mark. See
+> [`v1.8.0-tech-moca-redesign.md`](v1.8.0-tech-moca-redesign.md) and
+> [`v1.9.1-frameless-window.md`](v1.9.1-frameless-window.md).
 >
 > The smoke harness runs headless by default. Add `-- --smoke-show` to `npm run smoke` when you
 > want the window visible and the `native/_smoke*.png` artifacts to reflect the painted frame.
@@ -32,7 +34,7 @@ npm run smoke    # headless boot + screenshot + diagnostics, then exits
 | 2 — capture layer | ✅ | mic + system loopback → gain → analyser → mix → PCM16 → main |
 | 3 — streaming pipeline | ✅ | chunk closes → queued → whisper → timecoded merge, during recording |
 | 4 — session system | ✅ | folder + `session.json` + `AGENTS.md` (per-folder agent contract), create/open/list/rename, crash-recovery statuses |
-| 5 — UI (Tech Moca + skins, v1.9.0) | ✅ | source array, transport, transcript, squares visualizer, pipeline strip, floating tabbed settings, 11 skins, frameless controls |
+| 5 — UI (Tech Moca + skins, v1.9.0; frameless §10.16, v1.9.1) | ✅ | source array, transport, transcript, squares visualizer, pipeline strip, floating tabbed settings, 11 skins, frameless controls |
 | 6 — playback & export | ✅ | full.wav concat, karaoke follow, `.txt` / `.json` / audio |
 | 7 — package | ✅ | electron-builder portable → `build/susurroLive-1.1.0-portable.exe`; only `small.en` bundled (NSIS ~2 GB payload ceiling) |
 | 8 — agent control | ✅ | local MCP server (loopback + bearer token), 18 tools, renderer command channel, Hermes skill/helper, tests (`tools/test-mcp.js`, `tools/test-susurro-skill.js`, `tools/test-mcp-e2e.js`) |

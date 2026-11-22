@@ -1,7 +1,7 @@
 ---
 name: susurro-live-mcp
 description: Use when driving the running susurroLive app (record, stop, transcript, export, import, diarize) through its local MCP endpoint — skill path, no mcp_servers entry.
-version: 0.2.0
+version: 0.3.0
 platforms: [windows]
 metadata:
   hermes:
@@ -146,6 +146,11 @@ All commands accept `-Json` for machine-readable output.
 - Never print the bearer token. Never copy `mcp.json` into chat.
 - One recording at a time. `recording_start` fails when a recording is already active.
 - The app's UI is the source of truth; the helper only drives the same actions as the buttons.
+- **Do not lower `chunkSec` to get text faster.** The app is a *concurrent* transcriber, not a
+  caption engine: each window transcribes while recording continues, so a long meeting is fully
+  transcribed by the time it stops except for the tail. Presets are 15/30/60/120 s — 30–60 s for
+  typical use, **120 s for multi-hour multi-speaker meetings**. If you need the text now, call
+  `recording_stop {waitForTranscription:true}`; never trade window length for latency.
 
 ## Pitfalls
 
@@ -164,8 +169,16 @@ All commands accept `-Json` for machine-readable output.
   machine as the app.
 - **`start -Parent …` is persistent, not scoped** — it writes `lastSessionParent` into the app's
   `settings.json`, so later sessions default there. Mention it, or restore the previous parent.
-- **Chunk count follows the user's `chunkSec`** (1 s in a default test setup), so an 8 s clip can
-  report ~12 chunks. That is not an error.
+- **An empty last chunk is not an error**: if the user stops speaking before the window boundary,
+  the trailing `chunk_NNNN.wav` is silence and its transcript JSON has `text: ""`. Report it as a
+  quiet tail, not a failure.
+- **Tiny windows destroy quality.** Measured on the real app: `chunkSec: 1` still writes 4 s windows
+  on a 1 s stride (75 % overlap) and, until overlap-seam reconciliation lands (v2), the merge
+  duplicates stub words and capitalizes every window start — `Is Is this gonna work?`,
+  `All of this. Completed.`. At 60 s the same speaker produced clean casing and punctuation with
+  zero errors. Keep the presets.
+- **Chunk count follows the user's `chunkSec`** (presets 15/30/60/120 s; 60 s by default), so a
+  short clip opened mid-window can still report several chunks. That is not an error.
 - **Two skills, one name, is impossible** — if the user also keeps a `susurro-live` development
   skill, install this one as `susurro-live-mcp`; do not rename the directory or `name:` to match
   the dev skill.

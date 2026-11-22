@@ -8,7 +8,7 @@
 cloud) built for one job: capture the audio happening *around* the machine — a meeting, an interview,
 a session, a room — and hand back clean text, JSON with timecodes, and the audio itself.
 
-**v1.9.0** · Windows 10/11 x64 · BSD-3-Clause · ships as an installer **or** a single portable `.exe`
+**v1.9.1** · Windows 10/11 x64 · BSD-3-Clause · ships as an installer **or** a single portable `.exe`
 
 ---
 
@@ -153,9 +153,10 @@ squares-based audio visualizer on the right rail, never cramped.
   motion stay locked. The picker is in Settings → Appearance; the contrast gate is
   [`tools/check-skins.js`](tools/check-skins.js). See
   [`docs/v1.8.0-tech-moca-redesign.md`](docs/v1.8.0-tech-moca-redesign.md).
-- **The window is frameless with Tech Moca controls.** The header is the drag strip; minimize,
-  maximize/restore and close are drawn in the same hairline pill language as the rest of the chrome.
-  Edge resize, snap and Win+arrow still work.
+- **The window is frameless and follows Tech Moca §10.16.** The header is the `tm-titlebar` drag
+  strip; the document ends with `tm-window-controls` holding minimize, maximize/restore and close as
+  26 px round faces with hairline glyphs, fixed at the window's own top right and above every
+  overlay. Edge resize, snap and Win+arrow still work.
 - **The app icon is the yellow cube mark**, built as a multi-size `.ico` from the raw artwork
   (`tools/make-icon.js`); the same mark is the header brand.
 - **Settings is a floating window with tabs** (Engine, Transcription, Appearance, AI checkup,
@@ -174,27 +175,28 @@ a multilingual model in Settings.
 
 ## Status
 
-**v1.9.0 is built and verified on this machine.** It is Phase II of the Tech Moca redesign: the 11
-earlier themes return as chroma-only skins, the window is frameless with Tech Moca controls, and the
-app icon is the yellow cube mark. Phase I (v1.8.0) is the base design. Verified by real execution,
-not claims:
+**v1.9.1 is built and verified on this machine.** It is the single change after v1.9.0: the
+frameless window now follows Tech Moca §10.16 exactly — the header is the `tm-titlebar` handle, and
+the document ends with `tm-window-controls` (26 px round faces, hairline glyphs, fixed at the
+window's top right above every overlay). v1.9.0 is Phase II of the Tech Moca redesign: the 11
+earlier themes return as chroma-only skins, the window is frameless, and the app icon is the yellow
+cube mark. Phase I (v1.8.0) is the base design. Verified by real execution, not claims:
 
 | Check | Result |
 | --- | --- |
 | App boot | window renders at 820×1040, **0 page errors**; dev `--smoke` passes |
-| Smoke | floating settings geometry and 6 tabs, tab switching, arrow-key navigation, Escape/focus return, dark/light persistence, skin swap + persistence in both modes, frameless chrome (drag strip, minimize, maximize/restore), engine-first model list, checkup gating, minimum-window scroll check |
+| Smoke | floating settings geometry and 6 tabs, tab switching, arrow-key navigation, Escape/focus return, dark/light persistence, skin swap + persistence in both modes, frameless chrome (§10.16 drag strip, fixed 26 px faces, glyph/aria state, maximize/restore), engine-first model list, checkup gating, minimum-window scroll check |
 | Visualizer | 31/31 checks green with the Tech Moca palette and flat tiles; the canvas follows the active skin |
 | Skins | 11 skins × 2 modes pass the contrast gate (`tools/check-skins.js`); chroma-only, no layout movement |
 | UI | Tech Moca tokens; skins retint accent, status, chart and speaker colours; no gradients or glow |
-| Window | frameless with Tech Moca controls; maximize/restore and minimize verified in the smoke |
+| Window | frameless per Tech Moca §10.16; controls fixed at the window's top right above dialogs; maximize/restore and minimize verified in the smoke |
 | Icon | multi-size `.ico` from the raw artwork; header brand uses the 32 px mark |
 | Minimum window | 671×852 inner, `document.scrollWidth == innerWidth` |
 | Settings | 6 tabs, arrow-key navigation, Escape closes, focus returns to the Settings button |
 | Unchanged | engine, pipeline, session I/O, import, exporters, LLM harness and MCP behaviour is untouched by this release |
 
 The v1.7.1 engine, pipeline, session, import, exporter, LLM-harness, parakeet and MCP suites remain
-the regression baseline; this release changed the renderer, the window chrome, the icon and the smoke
-harness only.
+the regression baseline; this release changed only the window chrome and the smoke harness.
 
 Not done yet (deferred to v2): `.srt`/`.vtt` export, per-app audio capture, a resident whisper model,
 and overlap-window seam reconciliation — see [`docs/PLAN.md` §3](docs/PLAN.md). Speaker diarization

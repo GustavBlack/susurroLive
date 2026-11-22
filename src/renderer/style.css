@@ -43,7 +43,7 @@ html, body {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  padding: 10px;
+  padding: 0 10px 10px;
   gap: 8px;
 }
 
@@ -53,15 +53,18 @@ html, body {
   align-items: center;
   gap: 12px;
   height: var(--tm-topbar-h);
+  /* Full-bleed caption: the bar is the window's handle, and the controls sit
+     at the window's own top right corner (§10.16). */
+  margin: 0 -10px;
   padding: 0 10px;
+  padding-right: calc(var(--tm-topbar-h) * 3 + 8px);
   background: var(--tm-bg);
   border-bottom: 1px solid var(--tm-line-soft);
+  user-select: none;
   -webkit-app-region: drag;
 }
-.hdr button,
-.hdr input,
-.hdr .pill,
-.hdr .win-controls {
+.hdr :is(button, a, input, select, textarea, [role="button"], [role="tab"]),
+.hdr .pill {
   -webkit-app-region: no-drag;
 }
 .brand { display: flex; align-items: center; gap: 8px; flex: none; }
@@ -96,10 +99,33 @@ html, body {
 .session-name:focus { border-color: var(--tm-focus); background: var(--tm-bg-raised); }
 
 .hdr-right { display: flex; align-items: center; gap: 6px; margin-left: auto; }
-.win-controls { display: flex; align-items: center; gap: 2px; margin-left: 2px; }
-.win-btn { width: 28px; height: 28px; font-size: 13px; }
-.win-btn.win-close:hover { background: var(--tm-error-bg); border-color: var(--tm-error-line); color: var(--tm-error); }
-.win-btn.win-close:active { background: var(--tm-error-wash); }
+
+/* Frameless window (§10.16): three buttons at the window's own top right,
+   above every overlay, so the window can always be minimised or closed. */
+.tm-window-controls {
+  position: fixed; top: 0; right: 0; z-index: 70;
+  display: flex; height: var(--tm-topbar-h);
+  -webkit-app-region: no-drag;
+}
+.tm-window-button {
+  display: grid; place-items: center;
+  width: var(--tm-topbar-h); height: 100%; padding: 0;
+  border: 0; background: none; color: var(--tm-text-dim);
+  cursor: pointer;
+}
+.tm-window-face {
+  display: grid; place-items: center;
+  width: 26px; height: 26px;
+  border: 1px solid transparent; border-radius: var(--tm-r-pill);
+  transition: background var(--tm-t-fast), color var(--tm-t-fast), border-color var(--tm-t-fast);
+}
+.tm-window-face svg { width: 10px; height: 10px; }
+.tm-window-button:hover .tm-window-face { border-color: var(--tm-line); background: var(--tm-bg-hover); color: var(--tm-text); }
+.tm-window-button.is-close:hover .tm-window-face { border-color: var(--tm-error-line); background: var(--tm-error-bg); color: var(--tm-error); }
+.tm-window-button:focus-visible { outline: none; }
+.tm-window-button:focus-visible .tm-window-face { outline: 1px solid var(--tm-focus); outline-offset: 2px; }
+/* Another window has the keyboard: the buttons step back, as a title bar does. */
+.tm-window-controls.is-inactive .tm-window-button:not(:hover) { color: var(--tm-text-faint); }
 
 .icon-btn {
   width: 28px; height: 28px;
@@ -579,6 +605,7 @@ select option { background: var(--tm-bg-raised); color: var(--tm-text); }
 /* ---------------------------------------------------------------- toast */
 .toast {
   position: fixed; top: 58px; left: 50%; transform: translateX(-50%);
+  -webkit-app-region: no-drag;
   background: var(--tm-bg-raised);
   border: 1px solid var(--tm-line);
   color: var(--tm-text);
@@ -871,6 +898,12 @@ select option { background: var(--tm-bg-raised); color: var(--tm-text); }
   z-index: 65;
   padding: 16px;
 }
+/* The dimmed ground behind a dialog stays part of the window's handle; the
+   dialog itself is used, not dragged (§10.16). */
+.settings-backdrop,
+.modal { -webkit-app-region: drag; }
+.settings-backdrop > *,
+.modal > * { -webkit-app-region: no-drag; }
 .modal-card {
   width: min(560px, calc(100vw - 32px));
   max-height: 74vh;
@@ -1009,7 +1042,6 @@ html.skin-anim * {
 /* ---------------------------------------------------------------- narrow window */
 @media (max-width: 740px) {
   .hdr { gap: 6px; }
-  .win-btn { width: 26px; height: 26px; }
   .grid { grid-template-columns: minmax(0, 1fr) 210px; }
   .src-row { grid-template-columns: 34px minmax(0, 1fr) 46px auto auto; gap: 6px; padding: 5px 6px; }
   .folder-path { max-width: 160px; }

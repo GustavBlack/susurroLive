@@ -39,7 +39,6 @@ const S = {
   diarManual: false,    // the user clicked the button: toasts come from the click handler
   diarStartedAt: null,  // elapsed-time readout while running
   diarTimer: null,
-  diarFailed: false,    // last diarize attempt for this session failed (checkup gating)
   checkupRunning: false,
   checkupProgress: null,
   driftedChunkIds: [],  // chunks whose re-transcribed output no longer matches checkup.chunkHashes
@@ -617,12 +616,6 @@ function setTranscriptData({ words, segments, wordSpeakers, diarization, drifted
   S.segments = segments || [];
   S.wordSpeakers = wordSpeakers || [];
   if (driftedChunkIds) S.driftedChunkIds = driftedChunkIds;
-  // Keep the open session's snapshot in step with the diarization block. Main emits this
-  // identity on the transcript event whenever a run finishes, but S.session (session:current)
-  // is only re-fetched on open — without this the checkup gate's diarizationResolved() stayed
-  // false after a diarize in the current window, so the AI checkup button never appeared until
-  // the session was closed and reopened (regression guard: smoke stage 2.8b).
-  if (diarization && S.session) S.session.diarization = diarization;
   S.diarSpeakers = diarization?.speakers || 0;
   const at = diarization?.createdAt || null;
   if (at !== S.diarizedAt) {
@@ -707,9 +700,8 @@ async function runDiarize() {
   S.diarManual = false;
   S.diarizing = false;
   if (r.cancelled) showToast('speaker identification cancelled');
-  else if (!r.ok) { S.diarFailed = !sameFolder(r.folder, S.session?.folder) ? S.diarFailed : true; showToast(`speaker identification failed: ${r.error}`); }
+  else if (!r.ok) showToast(`speaker identification failed: ${r.error}`);
   else if (sameFolder(r.folder, S.session?.folder)) {
-    S.diarFailed = false;
     showToast(`${r.speakers} speaker${r.speakers === 1 ? '' : 's'} identified`);
   }
   renderSpeakers();
@@ -719,17 +711,9 @@ async function runDiarize() {
 // Non-destructive: main owns the checkup block + projection; this is UI only. Every bridge
 // call is defensive (api.llm may be absent in older main builds — the feature just stays off).
 
-function pipelineIdle() {
-  if (S.recording || S.importing) return false;
-  return !(S.chunks || []).some((c) => c.status !== 'done' && c.status !== 'error');
-}
-
-/** Diarization attempt for the open session has settled: done, failed, or unavailable. */
-function diarizationResolved() {
-  if (!S.session || S.diarizing || S.diar?.running) return false;
-  if (S.session.diarization) return true;
-  if (S.diar && S.diar.available === false) return true;
-  return S.diarFailed === true;
+/** A diarize run is in flight for the open session: the checkup waits for it (main enforces it). */
+function diarizeInFlight() {
+  return S.diarizing || !!(S.diar?.running && sameFolder(S.diar.running, S.session?.folder));
 }
 
 /** Visibility + labels for the checkup button, Checked|Original toggle and discard action. */
@@ -738,10 +722,12 @@ function renderCheckupUI() {
   if (!btn) return;
   const st = S.settings || {};
   const configured = st.llmCheckup === true && !!st.llmEndpoint && !!st.llmModel;
-  // Keep the button MOUNTED while a run is live: it turns into the progress affordance. Hiding it
-  // on click left the user with no visual signal that anything was happening.
-  const show = configured && !!S.session && S.words.length > 0
-    && pipelineIdle() && diarizationResolved();
+  // v1.9.2: LIVE gating. The button shows as soon as the open session has transcribed words,
+  // even while recording or while later chunks are still transcribing — main checks whatever
+  // words exist at click time. Only a diarize run in flight holds it off, and a live checkup
+  // run keeps the button MOUNTED: it is the progress affordance.
+  const show = S.checkupRunning
+    || (configured && !!S.session && S.words.length > 0 && !diarizeInFlight());
   btn.classList.toggle('hidden', !show);
   btn.classList.toggle('busy', S.checkupRunning);
   btn.disabled = S.checkupRunning;
@@ -752,7 +738,7 @@ function renderCheckupUI() {
     : 'AI checkup';
   btn.title = S.checkupRunning
     ? 'The transcript is being checked · you can keep working'
-    : 'Send the transcript to your AI endpoint for a correction pass';
+    : 'Send the transcript so far to your AI endpoint for a correction pass';
 
   const ck = S.session?.checkup;
   const hasCk = !!(ck && Array.isArray(ck.edits) && ck.edits.length);
@@ -943,7 +929,6 @@ async function refreshSession() {
   S.session = await api.session.current();
   if (!S.session) return;
   if (S.session.folder !== prevFolder) {
-    S.diarFailed = false;
     S.driftedChunkIds = [];
     S.driftToastShown = false;
   }
@@ -1580,23 +1565,33 @@ function loop() {
 
 // ---------------------------------------------------------------- wiring
 function wireWindowControls() {
+  const controls = document.querySelector('.tm-window-controls');
   const min = $('btnMinimize');
   const max = $('btnMaximize');
   const close = $('btnCloseWindow');
-  if (!min || !max || !close) return;
+  if (!controls || !min || !max || !close) return;
+
+  // Hairline glyphs on a 10 px grid (Tech Moca §10.16).
+  const GLYPH = {
+    maximize: '<svg viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1" aria-hidden="true"><path d="M1.5 1.5h7v7h-7z" shape-rendering="crispEdges"/></svg>',
+    restore: '<svg viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1" aria-hidden="true"><path d="M1.5 3.5h5v5h-5zM3.5 3.5v-2h5v5h-2"/></svg>',
+  };
+  const face = max.querySelector('.tm-window-face');
 
   min.onclick = () => api.window?.minimize?.();
   max.onclick = () => api.window?.toggleMaximize?.();
   close.onclick = () => api.window?.close?.();
 
-  const setMax = (on) => {
-    max.textContent = on ? '❐' : '□';
+  const setState = (s) => {
+    const on = !!s?.maximized;
+    controls.dataset.maximized = on ? 'true' : 'false';
+    if (face) face.innerHTML = on ? GLYPH.restore : GLYPH.maximize;
     max.setAttribute('aria-label', on ? 'Restore' : 'Maximize');
     max.title = on ? 'Restore' : 'Maximize';
-    max.dataset.maximized = on ? 'true' : 'false';
+    controls.classList.toggle('is-inactive', s?.focused === false);
   };
-  api.window?.isMaximized?.().then(setMax).catch(() => {});
-  api.window?.onState?.((s) => setMax(!!s?.maximized));
+  api.window?.getState?.().then(setState).catch(() => {});
+  api.window?.onState?.(setState);
 }
 
 function wire() {
@@ -1852,14 +1847,12 @@ function wire() {
   api.on('diarizeDone', (p) => {
     if (!sameFolder(p?.folder, S.session?.folder)) return;
     S.diarizing = false;
-    S.diarFailed = false;
     if (!S.diarManual) showToast(`${p.speakers} speaker${p.speakers === 1 ? '' : 's'} identified`);
     renderSpeakers();
   });
   api.on('diarizeError', (p) => {
     if (!sameFolder(p?.folder, S.session?.folder)) return;
     S.diarizing = false;
-    if (!p.cancelled) S.diarFailed = true;
     if (!S.diarManual) {
       showToast(p.cancelled ? 'speaker identification cancelled' : `speaker identification failed: ${p.error}`);
     }
